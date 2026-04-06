@@ -4,12 +4,15 @@ from pathlib import Path
 from sentence_transformers import SentenceTransformer
 import faiss
 
+from app.config import settings
+from app.utils.normalizer import normalize_text
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 EXERCISES_FILE = BASE_DIR / "exercises.json"
 VECTOR_DIR = BASE_DIR / "vector_store"
 
-MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+MODEL_NAME = settings.EMBEDDING_MODEL_NAME
 
 
 def load_exercises():
@@ -25,7 +28,7 @@ def build_text_representation(ex):
         ex.get("equipment", "") or "",
         " ".join(ex.get("instructions", [])),
     ]
-    return " ".join(parts)
+    return normalize_text(" ".join(filter(None, parts)))
 
 
 def build_vector_store():

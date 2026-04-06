@@ -4,7 +4,7 @@ class ExerciseAgent:
     def generate_response(self, query, context):
         results = context.get("results", [])
         if not results:
-            return "Nu am găsit exerciții relevante."
+            return "Nu am gasit exercitii relevante."
 
-        names = [r["name"] for r in results]
-        return f"Exerciții recomandate: {', '.join(names)}"
+        names = [result["name"] for result in results]
+        return f"Exercitii recomandate: {', '.join(names)}"

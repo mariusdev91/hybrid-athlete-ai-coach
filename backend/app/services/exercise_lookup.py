@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict, Any
-from sentence_transformers import SentenceTransformer
+
+from app.core.exercise_index import get_embedding_model
 from app.core.vector_store import vector_store
 from app.utils.normalizer import normalize_text
 
@@ -10,10 +11,6 @@ class ExerciseLookupService:
     Combines semantic search (FAISS) with logical filtering.
     """
 
-    def __init__(self):
-        # Load embedding model once
-        self.model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-
     def embed_text(self, text: str):
         """
         Generate a 384-dim embedding for FAISS.
@@ -21,7 +18,7 @@ class ExerciseLookupService:
         if not text:
             return [0.0] * 384
 
-        embedding = self.model.encode(text)
+        embedding = get_embedding_model().encode(text)
         return embedding.tolist()
 
     def search_exercises(
