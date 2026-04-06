@@ -69,13 +69,13 @@ function WorkoutPlanPage() {
   }, [calendar, selectedSessionKey]);
 
   useEffect(() => {
-    if (!selectedSession) {
+    if (!selectedSessionKey) {
       return;
     }
 
     setSessionStatusMessage("");
     setSessionForm(buildDefaultSessionForm());
-  }, [selectedSessionKey, selectedSession]);
+  }, [selectedSessionKey]);
 
   async function handleDownloadWorkbook() {
     if (!plan) {

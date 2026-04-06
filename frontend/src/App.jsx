@@ -274,6 +274,26 @@ function DashboardPage() {
     await loadAthleteWorkspace(selectedUserId);
   }
 
+  function handleStartNewAthlete() {
+    setErrorMessage("");
+
+    startTransition(() => {
+      setSelectedUserId("");
+      setUser(null);
+      setProfile(null);
+      setGoals([]);
+      setWorkoutPlans([]);
+      setGeneratedWorkout(null);
+      setSelectedPlan(null);
+      setUserForm(userDefaults);
+      setProfileForm(profileDefaults);
+      setGoalForm(goalDefaults);
+      setGenerationForm(generationDefaults);
+    });
+
+    setStatusMessage("New athlete mode enabled. Fill the form to create a fresh record.");
+  }
+
   async function handleCreateProfile(event) {
     event.preventDefault();
     if (!user) {
@@ -570,9 +590,19 @@ function DashboardPage() {
                   setUserForm((current) => ({ ...current, timezone: value }))
                 }
               />
-              <button className="action-button" disabled={isWorking}>
-                {isBusy ? "Saving..." : user ? "Save Athlete" : "Create Athlete"}
-              </button>
+              <div className="button-row">
+                <button className="action-button" disabled={isWorking}>
+                  {isBusy ? "Saving..." : user ? "Save Athlete" : "Create Athlete"}
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={isWorking}
+                  onClick={handleStartNewAthlete}
+                  type="button"
+                >
+                  New Athlete
+                </button>
+              </div>
             </form>
             {user ? (
               <DataBadge label="Active user" value={user.id} accent="sage" />
