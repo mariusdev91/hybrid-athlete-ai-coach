@@ -18,8 +18,12 @@ class WorkoutGenerationRequest(BaseModel):
 
 
 class GeneratedWorkoutPlanItem(BaseModel):
+    week_index: int
     day_index: int
     sequence_index: int
+    session_label: str | None = None
+    session_focus: str | None = None
+    phase_name: str | None = None
     exercise_id: str | None = None
     exercise_name: str
     equipment: str | None = None

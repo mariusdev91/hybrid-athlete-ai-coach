@@ -1,5 +1,8 @@
-import { startTransition, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, startTransition, useEffect, useRef, useState } from "react";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { api } from "./services/api.js";
+
+const WorkoutPlanPage = lazy(() => import("./pages/WorkoutPlanPage.jsx"));
 
 const userDefaults = {
   email: "frontend.demo@example.com",
@@ -23,14 +26,27 @@ const goalDefaults = {
 };
 
 const generationDefaults = {
-  duration_weeks: 2,
+  duration_weeks: 4,
   sessions_per_week: 4,
   focus: "",
   save_plan: true,
 };
 
 function App() {
+  return (
+    <Suspense fallback={<div className="app-shell"><div className="placeholder">Loading page...</div></div>}>
+      <Routes>
+        <Route element={<DashboardPage />} path="/" />
+        <Route element={<WorkoutPlanPage />} path="/plans/:planId" />
+        <Route element={<Navigate replace to="/" />} path="*" />
+      </Routes>
+    </Suspense>
+  );
+}
+
+function DashboardPage() {
   const mountedRef = useRef(false);
+  const navigate = useNavigate();
 
   const [health, setHealth] = useState(null);
   const [statusMessage, setStatusMessage] = useState("Backend status pending.");
@@ -779,6 +795,17 @@ function App() {
                       accent="sage"
                     />
                   </div>
+                  {selectedPlan ? (
+                    <div className="button-row">
+                      <button
+                        className="secondary-button"
+                        onClick={() => navigate(`/plans/${selectedPlan.id}`)}
+                        type="button"
+                      >
+                        Open Calendar Page
+                      </button>
+                    </div>
+                  ) : null}
                 </article>
 
                 <article className="context-card">
@@ -841,6 +868,15 @@ function App() {
           >
             {selectedPlan ? (
               <div className="stack">
+                <div className="button-row">
+                  <button
+                    className="secondary-button"
+                    onClick={() => navigate(`/plans/${selectedPlan.id}`)}
+                    type="button"
+                  >
+                    Open Full Calendar
+                  </button>
+                </div>
                 <SummaryCard
                   title={selectedPlan.title}
                   lines={[
@@ -851,17 +887,25 @@ function App() {
                 />
 
                 <div className="days-grid">
-                  {groupItemsByDay(selectedPlan.items).map(([day, items]) => (
-                    <article className="day-card" key={day}>
+                  {groupItemsBySession(selectedPlan.items).map((session) => (
+                    <article className="day-card" key={session.key}>
                       <header className="day-header">
-                        <strong>Day {day}</strong>
-                        <span>{items.length} movements</span>
+                        <strong>
+                          Week {session.weekIndex} / Day {session.dayIndex}
+                        </strong>
+                        <span>{session.items.length} movements</span>
                       </header>
+                      <p className="micro-copy">
+                        {session.sessionLabel || "Training session"} / {session.phaseName || "plan"}
+                      </p>
                       <div className="exercise-stack">
-                        {items.map((item) => (
+                        {session.items.map((item) => (
                           <article
                             className="exercise-card"
-                            key={item.id || `${item.day_index}-${item.sequence_index}`}
+                            key={
+                              item.id ||
+                              `${session.weekIndex}-${session.dayIndex}-${item.sequence_index}`
+                            }
                           >
                             <div className="exercise-topline">
                               <strong>{item.exercise_name}</strong>
@@ -995,16 +1039,29 @@ function splitList(value) {
     .filter(Boolean);
 }
 
-function groupItemsByDay(items = []) {
+function groupItemsBySession(items = []) {
   const groups = new Map();
 
   for (const item of items) {
-    const dayItems = groups.get(item.day_index) || [];
-    dayItems.push(item);
-    groups.set(item.day_index, dayItems);
+    const key = `${item.week_index || 1}-${item.day_index}`;
+    const session = groups.get(key) || {
+      key,
+      weekIndex: item.week_index || 1,
+      dayIndex: item.day_index,
+      sessionLabel: item.session_label || null,
+      phaseName: item.phase_name || null,
+      items: [],
+    };
+    session.items.push(item);
+    groups.set(key, session);
   }
 
-  return Array.from(groups.entries()).sort((left, right) => left[0] - right[0]);
+  return Array.from(groups.values()).sort((left, right) => {
+    if (left.weekIndex !== right.weekIndex) {
+      return left.weekIndex - right.weekIndex;
+    }
+    return left.dayIndex - right.dayIndex;
+  });
 }
 
 function mapUserToForm(userRecord) {

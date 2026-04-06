@@ -251,7 +251,11 @@ def list_workout_plan_items(workout_plan_id: str, db: Session = Depends(get_db))
         db.scalars(
             select(WorkoutPlanItem)
             .where(WorkoutPlanItem.workout_plan_id == workout_plan_id)
-            .order_by(WorkoutPlanItem.day_index.asc(), WorkoutPlanItem.sequence_index.asc())
+            .order_by(
+                WorkoutPlanItem.week_index.asc(),
+                WorkoutPlanItem.day_index.asc(),
+                WorkoutPlanItem.sequence_index.asc(),
+            )
         )
     )
 
