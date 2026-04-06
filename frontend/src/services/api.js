@@ -45,14 +45,20 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
-  createProfile(payload) {
-    return request("/db/profiles", {
-      method: "POST",
+  updateUser(userId, payload) {
+    return request(`/db/users/${userId}`, {
+      method: "PATCH",
       body: JSON.stringify(payload),
     });
   },
   getProfile(userId) {
     return request(`/db/users/${userId}/profile`);
+  },
+  saveProfile(userId, payload) {
+    return request(`/db/users/${userId}/profile`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
   },
   createGoal(payload) {
     return request("/db/goals", {

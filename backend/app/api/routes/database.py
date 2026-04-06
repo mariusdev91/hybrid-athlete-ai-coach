@@ -15,10 +15,12 @@ from app.db_rel.models import WorkoutSession
 from app.db_rel.session import get_db
 from app.schemas.database import AthleteProfileCreate
 from app.schemas.database import AthleteProfileRead
+from app.schemas.database import AthleteProfileUpsert
 from app.schemas.database import GoalCreate
 from app.schemas.database import GoalRead
 from app.schemas.database import UserCreate
 from app.schemas.database import UserRead
+from app.schemas.database import UserUpdate
 from app.schemas.database import WorkoutPlanCreate
 from app.schemas.database import WorkoutPlanDetailRead
 from app.schemas.database import WorkoutPlanItemCreate
@@ -53,6 +55,10 @@ def get_workout_plan_or_404(db: Session, workout_plan_id: str) -> WorkoutPlan:
     if not plan:
         raise HTTPException(status_code=404, detail="Workout plan not found.")
     return plan
+
+
+def get_profile_for_user(db: Session, user_id: str) -> AthleteProfile | None:
+    return db.scalar(select(AthleteProfile).where(AthleteProfile.user_id == user_id))
 
 
 def validate_goal_belongs_to_user(db: Session, goal_id: str, user_id: str) -> Goal:
@@ -102,13 +108,30 @@ def get_user(user_id: str, db: Session = Depends(get_db)):
     return get_user_or_404(db, user_id)
 
 
+@router.patch("/users/{user_id}", response_model=UserRead)
+def update_user(user_id: str, payload: UserUpdate, db: Session = Depends(get_db)):
+    user = get_user_or_404(db, user_id)
+    changes = payload.model_dump(exclude_unset=True)
+
+    email = changes.get("email")
+    if email and email != user.email:
+        existing = db.scalar(select(User).where(User.email == email))
+        if existing and existing.id != user_id:
+            raise HTTPException(status_code=409, detail="User with this email already exists.")
+
+    for field, value in changes.items():
+        setattr(user, field, value)
+
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 @router.post("/profiles", response_model=AthleteProfileRead, status_code=201)
 def create_athlete_profile(payload: AthleteProfileCreate, db: Session = Depends(get_db)):
     get_user_or_404(db, payload.user_id)
 
-    existing = db.scalar(
-        select(AthleteProfile).where(AthleteProfile.user_id == payload.user_id)
-    )
+    existing = get_profile_for_user(db, payload.user_id)
     if existing:
         raise HTTPException(status_code=409, detail="Profile already exists for this user.")
 
@@ -121,9 +144,31 @@ def create_athlete_profile(payload: AthleteProfileCreate, db: Session = Depends(
 
 @router.get("/users/{user_id}/profile", response_model=AthleteProfileRead)
 def get_athlete_profile(user_id: str, db: Session = Depends(get_db)):
-    profile = db.scalar(select(AthleteProfile).where(AthleteProfile.user_id == user_id))
+    profile = get_profile_for_user(db, user_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found.")
+    return profile
+
+
+@router.put("/users/{user_id}/profile", response_model=AthleteProfileRead)
+def upsert_athlete_profile(
+    user_id: str,
+    payload: AthleteProfileUpsert,
+    db: Session = Depends(get_db),
+):
+    get_user_or_404(db, user_id)
+    profile = get_profile_for_user(db, user_id)
+    changes = payload.model_dump(exclude_unset=True)
+
+    if profile:
+        for field, value in changes.items():
+            setattr(profile, field, value)
+    else:
+        profile = AthleteProfile(user_id=user_id, **changes)
+        db.add(profile)
+
+    db.commit()
+    db.refresh(profile)
     return profile
 
 

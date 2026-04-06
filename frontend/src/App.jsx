@@ -181,7 +181,7 @@ function App() {
         setSelectedPlan(latestPlan);
         setUserForm(mapUserToForm(userRecord));
         setProfileForm(profileRecord ? mapProfileToForm(profileRecord) : profileDefaults);
-        setGoalForm(goalsPayload[0] ? mapGoalToForm(goalsPayload[0]) : goalDefaults);
+        setGoalForm(goalDefaults);
         setGenerationForm(buildGenerationForm(profileRecord));
       });
 
@@ -198,21 +198,30 @@ function App() {
     }
   }
 
-  async function handleCreateUser(event) {
+  async function handleSaveUser(event) {
     event.preventDefault();
     setIsBusy(true);
     setErrorMessage("");
 
     try {
-      const payload = await api.createUser(userForm);
+      const payload = user
+        ? await api.updateUser(user.id, userForm)
+        : await api.createUser(userForm);
       if (!mountedRef.current) {
         return;
       }
 
       await refreshUsers({ silent: true, preferredUserId: payload.id });
-      await loadAthleteWorkspace(payload.id, {
-        message: "Athlete created. Next step: save the profile.",
+      startTransition(() => {
+        setUser(payload);
+        setSelectedUserId(payload.id);
+        setUserForm(mapUserToForm(payload));
       });
+      setStatusMessage(
+        user
+          ? "Athlete details updated. You can keep refining the profile."
+          : "Athlete created. Next step: save the profile.",
+      );
     } catch (error) {
       if (!mountedRef.current) {
         return;
@@ -257,8 +266,8 @@ function App() {
     }
 
     await runAction(async () => {
-      const payload = await api.createProfile({
-        user_id: user.id,
+      const hadProfile = Boolean(profile);
+      const payload = await api.saveProfile(user.id, {
         primary_sport: profileForm.primary_sport,
         experience_level: profileForm.experience_level,
         training_days_per_week: Number(profileForm.training_days_per_week),
@@ -273,7 +282,11 @@ function App() {
         setGenerationForm(buildGenerationForm(payload));
       });
 
-      setStatusMessage("Profile saved. You can define a goal now.");
+      setStatusMessage(
+        hadProfile
+          ? "Profile updated. The AI coach will use the latest context."
+          : "Profile saved. You can define a goal now.",
+      );
     });
   }
 
@@ -294,10 +307,10 @@ function App() {
 
       startTransition(() => {
         setGoals((current) => [payload, ...current]);
-        setGoalForm(mapGoalToForm(payload));
+        setGoalForm(goalDefaults);
       });
 
-      setStatusMessage("Goal saved. The AI coach can now build a starter plan.");
+      setStatusMessage("Goal added. The AI coach can now build a starter plan.");
     });
   }
 
@@ -519,9 +532,9 @@ function App() {
 
           <Panel
             title="1. Athlete Setup"
-            subtitle="Create a new athlete record when you want a fresh workspace."
+            subtitle="Create a new athlete or update the details of the one currently loaded."
           >
-            <form className="stack" onSubmit={handleCreateUser}>
+            <form className="stack" onSubmit={handleSaveUser}>
               <Field
                 label="Email"
                 value={userForm.email}
@@ -542,7 +555,7 @@ function App() {
                 }
               />
               <button className="action-button" disabled={isWorking}>
-                {isBusy ? "Saving..." : "Create Athlete"}
+                {isBusy ? "Saving..." : user ? "Save Athlete" : "Create Athlete"}
               </button>
             </form>
             {user ? (
@@ -630,7 +643,10 @@ function App() {
             )}
           </Panel>
 
-          <Panel title="3. Goal" subtitle="Give the generator a concrete direction.">
+          <Panel
+            title="3. Goal"
+            subtitle="Add a new goal. Existing goals stay listed below as current priorities."
+          >
             <form className="stack" onSubmit={handleCreateGoal}>
               <Field
                 label="Goal title"
@@ -655,7 +671,7 @@ function App() {
                 />
               </InlineFields>
               <button className="action-button" disabled={isWorking || !user}>
-                {isBusy ? "Saving..." : "Save Goal"}
+                {isBusy ? "Saving..." : "Add Goal"}
               </button>
             </form>
             {goals.length > 0 ? (
@@ -1011,14 +1027,6 @@ function mapProfileToForm(profileRecord) {
       (profileRecord.equipment_access || []).join(", ") || profileDefaults.equipment_access,
     limitations_notes:
       profileRecord.limitations_notes || profileDefaults.limitations_notes,
-  };
-}
-
-function mapGoalToForm(goalRecord) {
-  return {
-    title: goalRecord.title || goalDefaults.title,
-    goal_type: goalRecord.goal_type || goalDefaults.goal_type,
-    priority: goalRecord.priority || goalDefaults.priority,
   };
 }
 

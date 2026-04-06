@@ -133,6 +133,54 @@ def test_domain_flow_create_and_read(client):
     assert len(sessions_read.json()) == 1
 
 
+def test_domain_flow_update_existing_user_and_profile(client):
+    user = create_user(client, email="edit-flow@example.com")
+    user_id = user["id"]
+
+    created_profile = client.put(
+        f"/db/users/{user_id}/profile",
+        json={
+            "primary_sport": "hybrid training",
+            "experience_level": "intermediate",
+            "training_days_per_week": 4,
+            "session_duration_minutes": 50,
+            "equipment_access": ["body only", "dumbbell"],
+        },
+    )
+
+    updated_user = client.patch(
+        f"/db/users/{user_id}",
+        json={
+            "full_name": "Updated Smoke User",
+            "timezone": "UTC",
+        },
+    )
+    updated_profile = client.put(
+        f"/db/users/{user_id}/profile",
+        json={
+            "primary_sport": "strength training",
+            "training_days_per_week": 5,
+            "equipment_access": ["barbell", "dumbbell"],
+        },
+    )
+    profile_read = client.get(f"/db/users/{user_id}/profile")
+
+    assert created_profile.status_code == 200
+    assert created_profile.json()["primary_sport"] == "hybrid training"
+
+    assert updated_user.status_code == 200
+    assert updated_user.json()["full_name"] == "Updated Smoke User"
+    assert updated_user.json()["timezone"] == "UTC"
+
+    assert updated_profile.status_code == 200
+    assert updated_profile.json()["primary_sport"] == "strength training"
+    assert updated_profile.json()["training_days_per_week"] == 5
+    assert updated_profile.json()["equipment_access"] == ["barbell", "dumbbell"]
+
+    assert profile_read.status_code == 200
+    assert profile_read.json()["primary_sport"] == "strength training"
+
+
 def test_ai_generate_workout_and_save_plan(client):
     user = create_user(client, email="ai-flow@example.com")
     user_id = user["id"]

@@ -16,6 +16,12 @@ class UserCreate(BaseModel):
     timezone: str = "UTC"
 
 
+class UserUpdate(BaseModel):
+    email: str | None = None
+    full_name: str | None = None
+    timezone: str | None = None
+
+
 class UserRead(ORMBaseModel):
     id: str
     email: str
@@ -34,6 +40,17 @@ class AthleteProfileCreate(BaseModel):
     training_days_per_week: int | None = None
     session_duration_minutes: int | None = None
     equipment_access: list[str] = Field(default_factory=list)
+    limitations_notes: str | None = None
+
+
+class AthleteProfileUpsert(BaseModel):
+    birth_date: date | None = None
+    gender: str | None = None
+    primary_sport: str | None = None
+    experience_level: str | None = None
+    training_days_per_week: int | None = None
+    session_duration_minutes: int | None = None
+    equipment_access: list[str] | None = None
     limitations_notes: str | None = None
 
 
