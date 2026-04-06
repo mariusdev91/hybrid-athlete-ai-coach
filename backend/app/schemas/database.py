@@ -75,6 +75,36 @@ class GoalRead(ORMBaseModel):
     updated_at: datetime
 
 
+class WorkoutPlanItemInlineCreate(BaseModel):
+    day_index: int = Field(ge=1)
+    sequence_index: int = Field(ge=1)
+    exercise_id: str | None = None
+    exercise_name: str
+    prescribed_sets: int | None = Field(default=None, ge=1)
+    prescribed_reps: str | None = None
+    rest_seconds: int | None = Field(default=None, ge=0)
+    target_rpe: int | None = Field(default=None, ge=1, le=10)
+    notes: str | None = None
+
+
+class WorkoutPlanItemCreate(WorkoutPlanItemInlineCreate):
+    workout_plan_id: str
+
+
+class WorkoutPlanItemRead(ORMBaseModel):
+    id: str
+    workout_plan_id: str
+    day_index: int
+    sequence_index: int
+    exercise_id: str | None = None
+    exercise_name: str
+    prescribed_sets: int | None = None
+    prescribed_reps: str | None = None
+    rest_seconds: int | None = None
+    target_rpe: int | None = None
+    notes: str | None = None
+
+
 class WorkoutPlanCreate(BaseModel):
     user_id: str
     goal_id: str | None = None
@@ -84,6 +114,7 @@ class WorkoutPlanCreate(BaseModel):
     duration_weeks: int | None = None
     sessions_per_week: int | None = None
     status: str = "draft"
+    items: list[WorkoutPlanItemInlineCreate] = Field(default_factory=list)
 
 
 class WorkoutPlanRead(ORMBaseModel):
@@ -96,5 +127,34 @@ class WorkoutPlanRead(ORMBaseModel):
     duration_weeks: int | None = None
     sessions_per_week: int | None = None
     status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkoutPlanDetailRead(WorkoutPlanRead):
+    items: list[WorkoutPlanItemRead] = Field(default_factory=list)
+
+
+class WorkoutSessionCreate(BaseModel):
+    user_id: str
+    workout_plan_id: str | None = None
+    title: str
+    status: str = "completed"
+    performed_at: datetime | None = None
+    duration_minutes: int | None = Field(default=None, ge=0)
+    perceived_exertion: int | None = Field(default=None, ge=1, le=10)
+    notes: str | None = None
+
+
+class WorkoutSessionRead(ORMBaseModel):
+    id: str
+    user_id: str
+    workout_plan_id: str | None = None
+    title: str
+    status: str
+    performed_at: datetime | None = None
+    duration_minutes: int | None = None
+    perceived_exertion: int | None = None
+    notes: str | None = None
     created_at: datetime
     updated_at: datetime
