@@ -70,6 +70,19 @@ Set-Location backend
 ..\.venv\Scripts\python.exe -m pytest
 ```
 
+## Frontend Setup
+
+From the repository root:
+
+```powershell
+Copy-Item frontend\.env.example frontend\.env
+Set-Location frontend
+npm install
+npm run dev
+```
+
+The frontend expects the backend to be running on `http://127.0.0.1:8000` by default. Override `VITE_API_BASE_URL` in `frontend/.env` if needed.
+
 ## Useful Endpoints
 
 - `GET /`
