@@ -65,6 +65,25 @@ def test_health_and_search_endpoints(client):
     assert any("Glute" in item["name"] for item in search.json()["results"])
 
 
+def test_cors_headers_for_local_frontend(client):
+    origin = "http://127.0.0.1:4173"
+
+    preflight = client.options(
+        "/db/health",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    simple = client.get("/db/health", headers={"Origin": origin})
+
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == origin
+    assert simple.status_code == 200
+    assert simple.headers["access-control-allow-origin"] == origin
+
+
 def test_domain_flow_create_and_read(client):
     user = create_user(client, email="domain-flow@example.com")
     user_id = user["id"]
