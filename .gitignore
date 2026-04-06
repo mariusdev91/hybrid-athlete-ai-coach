@@ -214,6 +214,9 @@ __pycache__/
 venv/
 backend/venv/
 
+# Frontend dependencies
+node_modules/
+
 # Vector store (generated)
 backend/app/db/vector_store/
 *.npy
