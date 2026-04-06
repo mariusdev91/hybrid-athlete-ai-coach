@@ -219,6 +219,9 @@ backend/app/db/vector_store/
 *.npy
 *.faiss
 
+# Local relational database artifacts
+backend/hybrid_athlete.db
+
 # Free Exercise DB (submodule content)
 backend/app/db/free-exercise-db/
 

@@ -1,25 +1,46 @@
-import json
-import numpy as np
 import faiss
-from pathlib import Path
-
-BASE_DIR = Path(__file__).resolve().parent.parent / "db" / "vector_store"
+import numpy as np
 
 
-class ExerciseVectorStore:
-    def __init__(self):
-        self.embeddings = np.load(BASE_DIR / "embeddings.npy")
-        self.index = faiss.read_index(str(BASE_DIR / "index.faiss"))
+class VectorStore:
+    def __init__(self, dim=384):
+        self.dim = dim
+        self.index = faiss.IndexFlatL2(dim)
+        self.metadata = []
 
-        with open(BASE_DIR / "metadata.json", "r", encoding="utf-8") as f:
-            self.metadata = json.load(f)
+    def add(self, embedding, metadata):
+        # Convert list → numpy array
+        if isinstance(embedding, list):
+            embedding = np.array(embedding).astype("float32")
+
+        # Ensure shape is (1, dim)
+        if len(embedding.shape) == 1:
+            embedding = embedding.reshape(1, -1)
+
+        self.index.add(embedding)
+        self.metadata.append(metadata)
 
     def search(self, embedding, k=5):
+        # Convert list → numpy array
+        if isinstance(embedding, list):
+            embedding = np.array(embedding).astype("float32")
+
+        # Ensure shape is (1, dim)
+        if len(embedding.shape) == 1:
+            embedding = embedding.reshape(1, -1)
+
         distances, indices = self.index.search(embedding, k)
+
         results = []
-        for idx in indices[0]:
-            results.append(self.metadata[idx])
+        for dist, idx in zip(distances[0], indices[0]):
+            if idx == -1:
+                continue
+            item = self.metadata[idx]
+            item = {**item, "distance": float(dist)}
+            results.append(item)
+
         return results
 
 
-vector_store = ExerciseVectorStore()
+# GLOBAL SINGLETON
+vector_store = VectorStore()
