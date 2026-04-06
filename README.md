@@ -3,13 +3,15 @@ AI Coach with multi-agent system + RAG + exercise DB.
 
 ## Current Scope
 
-The repository is organized around a FastAPI backend and a future frontend shell.
-Right now the backend is the active product surface:
+The repository is organized around a FastAPI backend plus a lightweight React frontend.
+Right now the product supports an MVP flow across both layers:
 
-- athlete profile and goal persistence
+- athlete creation and editing
+- athlete profile persistence and updates
+- goal creation and review
 - workout plan persistence
 - semantic exercise search over a local exercise database
-- lightweight agent orchestration for recommendations and mini-workouts
+- lightweight AI workout generation and saved plan review
 
 ## Branch Workflow
 
@@ -93,7 +95,9 @@ The frontend expects the backend to be running on `http://127.0.0.1:8000` by def
 - `POST /admin/vector-store/rebuild`
 - `POST /ai/users/{user_id}/generate-workout`
 - `POST /db/users`
+- `PATCH /db/users/{user_id}`
 - `POST /db/profiles`
+- `PUT /db/users/{user_id}/profile`
 - `POST /db/goals`
 - `POST /db/workout-plans`
 - `GET /db/users/{user_id}/profile`
@@ -118,6 +122,6 @@ You can also generate a starter workout plan from the saved athlete profile and 
 
 ## Notes
 
-- The frontend is still a stub and is not part of Sprint 1.
+- The frontend currently covers the MVP flow in one screen: athlete, profile, goals, exercise search, AI generation, and saved plan review.
 - Exercise data is generated from the submodules declared in `.gitmodules`.
-- The immediate Sprint 1 goal is a clean, runnable backend foundation.
+- The current priority is product hardening: editable data, stronger flows, and QA polish before deeper feature work.
