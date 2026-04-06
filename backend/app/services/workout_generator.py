@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from math import ceil
 from typing import Any
 
 from sqlalchemy import select
@@ -11,17 +12,18 @@ from app.db_rel.models import AthleteProfile
 from app.db_rel.models import Goal
 from app.db_rel.models import WorkoutPlan
 from app.db_rel.models import WorkoutPlanItem
-from app.services.exercise_lookup import exercise_lookup
 from app.schemas.ai import GeneratedWorkoutPlan
 from app.schemas.ai import GeneratedWorkoutPlanItem
 from app.schemas.ai import WorkoutGenerationContext
 from app.schemas.ai import WorkoutGenerationRequest
+from app.services.exercise_lookup import exercise_lookup
 from app.utils.normalizer import normalize_text
 
 
 BALANCED_DAY_TEMPLATES = [
     {
         "label": "Lower Body Strength",
+        "focus": "foundational lower body strength and tissue resilience",
         "slots": [
             {
                 "role": "primary",
@@ -55,6 +57,7 @@ BALANCED_DAY_TEMPLATES = [
     },
     {
         "label": "Upper Body Push Pull",
+        "focus": "upper body strength balance and posture",
         "slots": [
             {
                 "role": "primary",
@@ -87,6 +90,7 @@ BALANCED_DAY_TEMPLATES = [
     },
     {
         "label": "Hybrid Conditioning",
+        "focus": "global work capacity and conditioning tolerance",
         "slots": [
             {
                 "role": "primary",
@@ -120,6 +124,7 @@ BALANCED_DAY_TEMPLATES = [
     },
     {
         "label": "Posterior Chain And Core",
+        "focus": "posterior chain durability and trunk control",
         "slots": [
             {
                 "role": "primary",
@@ -165,54 +170,149 @@ GOAL_TEMPLATE_MAP = {
 }
 
 
-ROLE_PRESETS = {
-    "primary": {
-        "prescribed_sets": 4,
-        "prescribed_reps": "6-8",
-        "rest_seconds": 90,
-        "target_rpe": 7,
-    },
-    "assistance": {
-        "prescribed_sets": 3,
-        "prescribed_reps": "8-12",
-        "rest_seconds": 60,
-        "target_rpe": 7,
-    },
-    "core": {
-        "prescribed_sets": 3,
-        "prescribed_reps": "12-15",
-        "rest_seconds": 45,
-        "target_rpe": 6,
-    },
-    "mobility": {
-        "prescribed_sets": 2,
-        "prescribed_reps": "30-45 sec",
-        "rest_seconds": 30,
-        "target_rpe": None,
-    },
+GOAL_TRACKS = {
+    "mobility": "mobility",
+    "recovery": "mobility",
+    "conditioning": "endurance",
+    "endurance": "endurance",
+    "fat loss": "endurance",
+    "strength": "strength",
+    "performance": "strength",
 }
 
 
-GOAL_ROLE_ADJUSTMENTS = {
-    "conditioning": {
-        "primary": {"prescribed_sets": 3, "prescribed_reps": "10-12", "rest_seconds": 60},
-        "assistance": {"prescribed_sets": 3, "prescribed_reps": "12-15", "rest_seconds": 45},
-        "core": {"prescribed_sets": 3, "prescribed_reps": "15-20", "rest_seconds": 30},
+PHASE_LIBRARY = {
+    "strength": {
+        "Anatomical Adaptation": {
+            "headline": "prepare connective tissue, technique, and joint stability",
+            "load_note": "higher technical volume, lower intensity",
+            "roles": {
+                "primary": {"prescribed_sets": 3, "prescribed_reps": "10-12", "rest_seconds": 75, "target_rpe": 6},
+                "assistance": {"prescribed_sets": 3, "prescribed_reps": "12-15", "rest_seconds": 60, "target_rpe": 6},
+                "core": {"prescribed_sets": 2, "prescribed_reps": "12-15", "rest_seconds": 30, "target_rpe": 5},
+                "mobility": {"prescribed_sets": 2, "prescribed_reps": "40-60 sec", "rest_seconds": 30, "target_rpe": None},
+            },
+        },
+        "Accumulation": {
+            "headline": "build work capacity and structural strength",
+            "load_note": "volume emphasis with progressive overload",
+            "roles": {
+                "primary": {"prescribed_sets": 4, "prescribed_reps": "8-10", "rest_seconds": 90, "target_rpe": 7},
+                "assistance": {"prescribed_sets": 3, "prescribed_reps": "10-12", "rest_seconds": 60, "target_rpe": 7},
+                "core": {"prescribed_sets": 3, "prescribed_reps": "12-15", "rest_seconds": 30, "target_rpe": 6},
+                "mobility": {"prescribed_sets": 2, "prescribed_reps": "30-45 sec", "rest_seconds": 30, "target_rpe": None},
+            },
+        },
+        "Intensification": {
+            "headline": "convert volume into maximal strength emphasis",
+            "load_note": "lower reps, longer rest, higher intent",
+            "roles": {
+                "primary": {"prescribed_sets": 5, "prescribed_reps": "4-6", "rest_seconds": 120, "target_rpe": 8},
+                "assistance": {"prescribed_sets": 4, "prescribed_reps": "6-8", "rest_seconds": 75, "target_rpe": 7},
+                "core": {"prescribed_sets": 3, "prescribed_reps": "8-12", "rest_seconds": 45, "target_rpe": 6},
+                "mobility": {"prescribed_sets": 2, "prescribed_reps": "30-45 sec", "rest_seconds": 30, "target_rpe": None},
+            },
+        },
+        "Realization": {
+            "headline": "reduce fatigue and express the strongest work of the cycle",
+            "load_note": "reduced volume with sharp execution",
+            "roles": {
+                "primary": {"prescribed_sets": 3, "prescribed_reps": "4-5", "rest_seconds": 150, "target_rpe": 7},
+                "assistance": {"prescribed_sets": 2, "prescribed_reps": "6-8", "rest_seconds": 75, "target_rpe": 6},
+                "core": {"prescribed_sets": 2, "prescribed_reps": "8-10", "rest_seconds": 45, "target_rpe": 5},
+                "mobility": {"prescribed_sets": 2, "prescribed_reps": "30-45 sec", "rest_seconds": 30, "target_rpe": None},
+            },
+        },
     },
     "endurance": {
-        "primary": {"prescribed_sets": 3, "prescribed_reps": "10-12", "rest_seconds": 60},
-        "assistance": {"prescribed_sets": 3, "prescribed_reps": "12-15", "rest_seconds": 45},
+        "Anatomical Adaptation": {
+            "headline": "prepare movement quality and aerobic support work",
+            "load_note": "steady volume, lower density",
+            "roles": {
+                "primary": {"prescribed_sets": 3, "prescribed_reps": "10-12", "rest_seconds": 60, "target_rpe": 6},
+                "assistance": {"prescribed_sets": 2, "prescribed_reps": "12-15", "rest_seconds": 45, "target_rpe": 6},
+                "core": {"prescribed_sets": 2, "prescribed_reps": "12-15", "rest_seconds": 30, "target_rpe": 5},
+                "mobility": {"prescribed_sets": 2, "prescribed_reps": "40-60 sec", "rest_seconds": 30, "target_rpe": None},
+            },
+        },
+        "Accumulation": {
+            "headline": "expand work capacity and muscular endurance",
+            "load_note": "higher density and repeatability",
+            "roles": {
+                "primary": {"prescribed_sets": 4, "prescribed_reps": "10-14", "rest_seconds": 60, "target_rpe": 7},
+                "assistance": {"prescribed_sets": 3, "prescribed_reps": "12-15", "rest_seconds": 45, "target_rpe": 7},
+                "core": {"prescribed_sets": 3, "prescribed_reps": "15-20", "rest_seconds": 30, "target_rpe": 6},
+                "mobility": {"prescribed_sets": 2, "prescribed_reps": "30-45 sec", "rest_seconds": 30, "target_rpe": None},
+            },
+        },
+        "Intensification": {
+            "headline": "shift toward specific strength endurance and pace tolerance",
+            "load_note": "moderate reps with sharper intent",
+            "roles": {
+                "primary": {"prescribed_sets": 4, "prescribed_reps": "6-8", "rest_seconds": 75, "target_rpe": 7},
+                "assistance": {"prescribed_sets": 3, "prescribed_reps": "8-10", "rest_seconds": 60, "target_rpe": 7},
+                "core": {"prescribed_sets": 3, "prescribed_reps": "10-12", "rest_seconds": 30, "target_rpe": 6},
+                "mobility": {"prescribed_sets": 2, "prescribed_reps": "30-45 sec", "rest_seconds": 30, "target_rpe": None},
+            },
+        },
+        "Realization": {
+            "headline": "freshen up while preserving intensity and movement speed",
+            "load_note": "lower volume, maintain quality",
+            "roles": {
+                "primary": {"prescribed_sets": 3, "prescribed_reps": "6-8", "rest_seconds": 75, "target_rpe": 6},
+                "assistance": {"prescribed_sets": 2, "prescribed_reps": "8-10", "rest_seconds": 45, "target_rpe": 6},
+                "core": {"prescribed_sets": 2, "prescribed_reps": "10-12", "rest_seconds": 30, "target_rpe": 5},
+                "mobility": {"prescribed_sets": 2, "prescribed_reps": "30-45 sec", "rest_seconds": 30, "target_rpe": None},
+            },
+        },
     },
     "mobility": {
-        "primary": {"prescribed_sets": 3, "prescribed_reps": "8-10", "rest_seconds": 45, "target_rpe": 6},
-        "assistance": {"prescribed_sets": 2, "prescribed_reps": "10-12", "rest_seconds": 45, "target_rpe": 6},
-        "core": {"prescribed_sets": 2, "prescribed_reps": "10-12", "rest_seconds": 30, "target_rpe": 5},
+        "Anatomical Adaptation": {
+            "headline": "restore movement quality and tolerance",
+            "load_note": "gentle progression and technical control",
+            "roles": {
+                "primary": {"prescribed_sets": 2, "prescribed_reps": "8-10", "rest_seconds": 45, "target_rpe": 5},
+                "assistance": {"prescribed_sets": 2, "prescribed_reps": "10-12", "rest_seconds": 45, "target_rpe": 5},
+                "core": {"prescribed_sets": 2, "prescribed_reps": "10-12", "rest_seconds": 30, "target_rpe": 5},
+                "mobility": {"prescribed_sets": 3, "prescribed_reps": "45-60 sec", "rest_seconds": 30, "target_rpe": None},
+            },
+        },
+        "Accumulation": {
+            "headline": "build repeatable positions and low-fatigue strength",
+            "load_note": "slightly higher volume, control first",
+            "roles": {
+                "primary": {"prescribed_sets": 3, "prescribed_reps": "8-10", "rest_seconds": 45, "target_rpe": 6},
+                "assistance": {"prescribed_sets": 3, "prescribed_reps": "10-12", "rest_seconds": 45, "target_rpe": 6},
+                "core": {"prescribed_sets": 2, "prescribed_reps": "12-15", "rest_seconds": 30, "target_rpe": 5},
+                "mobility": {"prescribed_sets": 3, "prescribed_reps": "45-60 sec", "rest_seconds": 30, "target_rpe": None},
+            },
+        },
+        "Intensification": {
+            "headline": "translate mobility gains into stronger end-range control",
+            "load_note": "moderate effort with strict technique",
+            "roles": {
+                "primary": {"prescribed_sets": 3, "prescribed_reps": "6-8", "rest_seconds": 60, "target_rpe": 6},
+                "assistance": {"prescribed_sets": 2, "prescribed_reps": "8-10", "rest_seconds": 45, "target_rpe": 6},
+                "core": {"prescribed_sets": 2, "prescribed_reps": "10-12", "rest_seconds": 30, "target_rpe": 5},
+                "mobility": {"prescribed_sets": 3, "prescribed_reps": "45-60 sec", "rest_seconds": 30, "target_rpe": None},
+            },
+        },
+        "Realization": {
+            "headline": "consolidate movement quality and recover fatigue",
+            "load_note": "reduced stress, crisp execution",
+            "roles": {
+                "primary": {"prescribed_sets": 2, "prescribed_reps": "6-8", "rest_seconds": 45, "target_rpe": 5},
+                "assistance": {"prescribed_sets": 2, "prescribed_reps": "8-10", "rest_seconds": 45, "target_rpe": 5},
+                "core": {"prescribed_sets": 2, "prescribed_reps": "8-10", "rest_seconds": 30, "target_rpe": 4},
+                "mobility": {"prescribed_sets": 3, "prescribed_reps": "45-60 sec", "rest_seconds": 30, "target_rpe": None},
+            },
+        },
     },
 }
 
 
 class WorkoutGeneratorService:
-    name = "rule-based-rag-v1"
+    name = "bompa-inspired-rag-v2"
 
     def build_context(
         self,
@@ -240,51 +340,59 @@ class WorkoutGeneratorService:
         context = self.build_context(profile, request)
         session_count = request.sessions_per_week or context.training_days_per_week or 3
         focus = self._resolve_focus(request, goal, profile)
+        goal_track = self._resolve_goal_track(goal, focus)
         title = request.title or self._build_title(focus, goal)
-        description = request.description or self._build_description(focus, goal, context)
+        description = request.description or self._build_description(focus, goal, context, request.duration_weeks)
 
         templates = self._resolve_templates(goal, focus, session_count)
-        used_ids: set[str] = set()
+        phase_schedule = self._build_phase_schedule(request.duration_weeks, goal_track)
         search_queries: list[str] = []
         items: list[GeneratedWorkoutPlanItem] = []
         max_slots_per_day = 3 if context.session_duration_minutes and context.session_duration_minutes < 45 else 4
 
-        for day_index, template in enumerate(templates, start=1):
-            for sequence_index, slot in enumerate(template["slots"][:max_slots_per_day], start=1):
-                exercise = self._pick_exercise(
-                    slot["queries"],
-                    context.equipment_access,
-                    used_ids,
-                    search_queries,
-                )
-                if not exercise:
-                    continue
+        for week in phase_schedule:
+            for day_index, template in enumerate(templates, start=1):
+                used_ids: set[str] = set()
+                session_label = template["label"]
+                session_focus = self._build_session_focus(template, week)
 
-                if exercise.get("id"):
-                    used_ids.add(exercise["id"])
-
-                prescription = self._build_prescription(slot["role"], goal.goal_type if goal else None)
-                notes = f"{template['label']} emphasis"
-                if slot["role"] == "mobility" and context.limitations_notes:
-                    notes = f"{notes}. Respect limitations: {context.limitations_notes}"
-
-                items.append(
-                    GeneratedWorkoutPlanItem(
-                        day_index=day_index,
-                        sequence_index=sequence_index,
-                        exercise_id=exercise.get("id"),
-                        exercise_name=exercise["name"],
-                        equipment=exercise.get("equipment"),
-                        primary_muscles=exercise.get("primary_muscles", []),
-                        secondary_muscles=exercise.get("secondary_muscles", []),
-                        source_query=exercise["source_query"],
-                        prescribed_sets=prescription["prescribed_sets"],
-                        prescribed_reps=prescription["prescribed_reps"],
-                        rest_seconds=prescription["rest_seconds"],
-                        target_rpe=prescription["target_rpe"],
-                        notes=notes,
+                for sequence_index, slot in enumerate(template["slots"][:max_slots_per_day], start=1):
+                    exercise = self._pick_exercise(
+                        slot["queries"],
+                        context.equipment_access,
+                        used_ids,
+                        search_queries,
                     )
-                )
+                    if not exercise:
+                        continue
+
+                    if exercise.get("id"):
+                        used_ids.add(exercise["id"])
+
+                    prescription = self._build_prescription(slot["role"], week["phase_name"], goal_track)
+                    notes = self._build_item_notes(template, week, context, slot["role"])
+
+                    items.append(
+                        GeneratedWorkoutPlanItem(
+                            week_index=week["week_index"],
+                            day_index=day_index,
+                            sequence_index=sequence_index,
+                            session_label=session_label,
+                            session_focus=session_focus,
+                            phase_name=week["phase_name"],
+                            exercise_id=exercise.get("id"),
+                            exercise_name=exercise["name"],
+                            equipment=exercise.get("equipment"),
+                            primary_muscles=exercise.get("primary_muscles", []),
+                            secondary_muscles=exercise.get("secondary_muscles", []),
+                            source_query=exercise["source_query"],
+                            prescribed_sets=prescription["prescribed_sets"],
+                            prescribed_reps=prescription["prescribed_reps"],
+                            rest_seconds=prescription["rest_seconds"],
+                            target_rpe=prescription["target_rpe"],
+                            notes=notes,
+                        )
+                    )
 
         plan = GeneratedWorkoutPlan(
             title=title,
@@ -295,7 +403,7 @@ class WorkoutGeneratorService:
             status="draft",
             items=items,
         )
-        return plan, context, search_queries
+        return plan, context, list(dict.fromkeys(search_queries))
 
     def save_plan(
         self,
@@ -321,8 +429,12 @@ class WorkoutGeneratorService:
             db.add(
                 WorkoutPlanItem(
                     workout_plan_id=workout_plan.id,
+                    week_index=item.week_index,
                     day_index=item.day_index,
                     sequence_index=item.sequence_index,
+                    session_label=item.session_label,
+                    session_focus=item.session_focus,
+                    phase_name=item.phase_name,
                     exercise_id=item.exercise_id,
                     exercise_name=item.exercise_name,
                     prescribed_sets=item.prescribed_sets,
@@ -354,22 +466,32 @@ class WorkoutGeneratorService:
             return f"{profile.primary_sport} support"
         return "balanced hybrid training"
 
+    def _resolve_goal_track(self, goal: Goal | None, focus: str) -> str:
+        goal_key = (goal.goal_type if goal else focus).lower()
+        for key, track in GOAL_TRACKS.items():
+            if key in goal_key:
+                return track
+        return "strength"
+
     def _build_title(self, focus: str, goal: Goal | None) -> str:
         if goal:
-            return f"{goal.title} - Starter Plan"
-        return f"{focus.title()} - Starter Plan"
+            return f"{goal.title} - Periodized Plan"
+        return f"{focus.title()} - Periodized Plan"
 
     def _build_description(
         self,
         focus: str,
         goal: Goal | None,
         context: WorkoutGenerationContext,
+        duration_weeks: int,
     ) -> str:
         sport = context.primary_sport or "hybrid athlete"
         goal_type = goal.goal_type if goal else "general development"
         return (
-            f"Auto-generated starter plan for {sport}. "
-            f"Focus: {focus}. Goal type: {goal_type}."
+            f"Bompa-inspired periodized starter plan for {sport}. "
+            f"Focus: {focus}. Goal type: {goal_type}. "
+            f"The cycle uses a Bompa-inspired progression across adaptation, accumulation, "
+            f"intensification, and realization phases whenever the calendar length allows over {duration_weeks} weeks."
         )
 
     def _resolve_templates(self, goal: Goal | None, focus: str, session_count: int) -> list[dict[str, Any]]:
@@ -387,6 +509,77 @@ class WorkoutGeneratorService:
         for index in range(session_count):
             selected.append(templates[index % len(templates)])
         return selected
+
+    def _build_phase_schedule(self, duration_weeks: int, goal_track: str) -> list[dict[str, Any]]:
+        if duration_weeks <= 1:
+            phases = ["Anatomical Adaptation"]
+        elif duration_weeks == 2:
+            phases = ["Anatomical Adaptation", "Accumulation"]
+        elif duration_weeks == 3:
+            phases = ["Anatomical Adaptation", "Accumulation", "Realization"]
+        elif duration_weeks == 4:
+            phases = [
+                "Anatomical Adaptation",
+                "Accumulation",
+                "Intensification",
+                "Realization",
+            ]
+        else:
+            adaptation_weeks = 2 if duration_weeks >= 7 else 1
+            realization_weeks = 2 if duration_weeks >= 8 else 1
+            remaining_weeks = max(0, duration_weeks - adaptation_weeks - realization_weeks)
+
+            if remaining_weeks <= 1:
+                accumulation_weeks = remaining_weeks
+                intensification_weeks = 0
+            else:
+                accumulation_weeks = max(1, ceil(remaining_weeks * 0.6))
+                intensification_weeks = max(1, remaining_weeks - accumulation_weeks)
+
+                while accumulation_weeks + intensification_weeks > remaining_weeks:
+                    accumulation_weeks -= 1
+
+            phases = (
+                ["Anatomical Adaptation"] * adaptation_weeks
+                + ["Accumulation"] * accumulation_weeks
+                + ["Intensification"] * intensification_weeks
+                + ["Realization"] * realization_weeks
+            )
+            phases = phases[:duration_weeks]
+
+        goal_library = PHASE_LIBRARY[goal_track]
+        schedule = []
+        for week_index, phase_name in enumerate(phases, start=1):
+            phase = goal_library[phase_name]
+            schedule.append(
+                {
+                    "week_index": week_index,
+                    "phase_name": phase_name,
+                    "headline": phase["headline"],
+                    "load_note": phase["load_note"],
+                }
+            )
+        return schedule
+
+    def _build_session_focus(self, template: dict[str, Any], week: dict[str, Any]) -> str:
+        return f"{week['headline']}; day emphasis: {template['focus']}"
+
+    def _build_item_notes(
+        self,
+        template: dict[str, Any],
+        week: dict[str, Any],
+        context: WorkoutGenerationContext,
+        role: str,
+    ) -> str:
+        note_parts = [
+            f"{week['phase_name']} block",
+            f"Week emphasis: {week['headline']}",
+            f"Load strategy: {week['load_note']}",
+            f"Session emphasis: {template['focus']}",
+        ]
+        if role == "mobility" and context.limitations_notes:
+            note_parts.append(f"Respect limitations: {context.limitations_notes}")
+        return " | ".join(note_parts)
 
     def _pick_exercise(
         self,
@@ -479,15 +672,8 @@ class WorkoutGeneratorService:
 
         return score
 
-    def _build_prescription(self, role: str, goal_type: str | None):
-        prescription = dict(ROLE_PRESETS[role])
-        if goal_type:
-            goal_key = goal_type.lower()
-            for key, adjustments in GOAL_ROLE_ADJUSTMENTS.items():
-                if key in goal_key and role in adjustments:
-                    prescription.update(adjustments[role])
-                    break
-        return prescription
+    def _build_prescription(self, role: str, phase_name: str, goal_track: str):
+        return dict(PHASE_LIBRARY[goal_track][phase_name]["roles"][role])
 
 
 workout_generator = WorkoutGeneratorService()

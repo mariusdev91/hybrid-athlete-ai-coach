@@ -102,8 +102,12 @@ def test_domain_flow_create_and_read(client):
             "sessions_per_week": 4,
             "items": [
                 {
+                    "week_index": 1,
                     "day_index": 1,
                     "sequence_index": 1,
+                    "session_label": "Lower Body Strength",
+                    "session_focus": "strength foundation",
+                    "phase_name": "Accumulation",
                     "exercise_name": "Split Squat with Dumbbells",
                     "prescribed_sets": 4,
                     "prescribed_reps": "8",
@@ -139,6 +143,7 @@ def test_domain_flow_create_and_read(client):
     assert plan_detail.status_code == 200
     assert plan_detail.json()["id"] == plan_id
     assert len(plan_detail.json()["items"]) == 1
+    assert plan_detail.json()["items"][0]["week_index"] == 1
 
     assert sessions.status_code == 201
     assert sessions.json()["workout_plan_id"] == plan_id
@@ -210,7 +215,7 @@ def test_ai_generate_workout_and_save_plan(client):
         f"/ai/users/{user_id}/generate-workout",
         json={
             "goal_id": goal["id"],
-            "duration_weeks": 2,
+            "duration_weeks": 4,
             "sessions_per_week": 3,
             "save_plan": True,
         },
@@ -218,12 +223,17 @@ def test_ai_generate_workout_and_save_plan(client):
 
     assert generated.status_code == 200
     payload = generated.json()
-    assert payload["generator"] == "rule-based-rag-v1"
+    assert payload["generator"] == "bompa-inspired-rag-v2"
     assert payload["user_id"] == user_id
     assert payload["goal"]["id"] == goal["id"]
     assert len(payload["search_queries"]) > 0
     assert payload["generated_plan"]["sessions_per_week"] == 3
-    assert len(payload["generated_plan"]["items"]) >= 9
+    assert len(payload["generated_plan"]["items"]) >= 36
+    assert {item["week_index"] for item in payload["generated_plan"]["items"]} == {1, 2, 3, 4}
+    assert any(item["phase_name"] == "Anatomical Adaptation" for item in payload["generated_plan"]["items"])
+    assert any(item["phase_name"] == "Accumulation" for item in payload["generated_plan"]["items"])
+    assert any(item["phase_name"] == "Intensification" for item in payload["generated_plan"]["items"])
+    assert any(item["phase_name"] == "Realization" for item in payload["generated_plan"]["items"])
 
     saved_plan = payload["saved_workout_plan"]
     assert saved_plan is not None

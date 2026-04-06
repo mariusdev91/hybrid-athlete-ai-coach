@@ -135,6 +135,11 @@ class WorkoutPlan(TimestampMixin, Base):
     items: Mapped[list["WorkoutPlanItem"]] = relationship(
         back_populates="workout_plan",
         cascade="all, delete-orphan",
+        order_by=lambda: (
+            WorkoutPlanItem.week_index.asc(),
+            WorkoutPlanItem.day_index.asc(),
+            WorkoutPlanItem.sequence_index.asc(),
+        ),
     )
     sessions: Mapped[list["WorkoutSession"]] = relationship(back_populates="workout_plan")
 
@@ -149,8 +154,12 @@ class WorkoutPlanItem(Base):
         nullable=False,
         index=True,
     )
+    week_index: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     day_index: Mapped[int] = mapped_column(Integer, nullable=False)
     sequence_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    session_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    session_focus: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phase_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     exercise_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     exercise_name: Mapped[str] = mapped_column(String(255), nullable=False)
     prescribed_sets: Mapped[int | None] = mapped_column(Integer, nullable=True)

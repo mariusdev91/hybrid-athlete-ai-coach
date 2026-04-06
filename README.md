@@ -10,8 +10,10 @@ Right now the product supports an MVP flow across both layers:
 - athlete profile persistence and updates
 - goal creation and review
 - workout plan persistence
+- workout plan calendar view on a dedicated page
+- Excel export split by training week
 - semantic exercise search over a local exercise database
-- lightweight AI workout generation and saved plan review
+- Bompa-inspired AI workout generation and saved plan review
 
 ## Branch Workflow
 
@@ -89,6 +91,8 @@ npm run dev
 
 The frontend expects the backend to be running on `http://127.0.0.1:8000` by default. Override `VITE_API_BASE_URL` in `frontend/.env` if needed.
 
+The saved workout plan can now be opened on a dedicated calendar page from the dashboard, and downloaded as an Excel workbook with one sheet per week.
+
 ## Useful Endpoints
 
 - `GET /`
@@ -127,5 +131,7 @@ You can also generate a starter workout plan from the saved athlete profile and 
 ## Notes
 
 - The frontend currently covers the MVP flow in one screen: athlete, profile, goals, exercise search, AI generation, and saved plan review.
+- Generated plans now include week-by-week periodization metadata so the UI can render a multi-week calendar and week-based Excel export.
+- The current periodization engine is Bompa-inspired: it progresses through adaptation, accumulation, intensification, and realization phases across the saved plan.
 - Exercise data is generated from the submodules declared in `.gitmodules`.
 - The current priority is product hardening: editable data, stronger flows, and QA polish before deeper feature work.

@@ -93,8 +93,12 @@ class GoalRead(ORMBaseModel):
 
 
 class WorkoutPlanItemInlineCreate(BaseModel):
+    week_index: int = Field(default=1, ge=1)
     day_index: int = Field(ge=1)
     sequence_index: int = Field(ge=1)
+    session_label: str | None = None
+    session_focus: str | None = None
+    phase_name: str | None = None
     exercise_id: str | None = None
     exercise_name: str
     prescribed_sets: int | None = Field(default=None, ge=1)
@@ -111,8 +115,12 @@ class WorkoutPlanItemCreate(WorkoutPlanItemInlineCreate):
 class WorkoutPlanItemRead(ORMBaseModel):
     id: str
     workout_plan_id: str
+    week_index: int
     day_index: int
     sequence_index: int
+    session_label: str | None = None
+    session_focus: str | None = None
+    phase_name: str | None = None
     exercise_id: str | None = None
     exercise_name: str
     prescribed_sets: int | None = None
