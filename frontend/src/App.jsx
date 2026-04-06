@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import { api } from "./services/api.js";
 
 const userDefaults = {
@@ -30,6 +30,8 @@ const generationDefaults = {
 };
 
 function App() {
+  const mountedRef = useRef(false);
+
   const [health, setHealth] = useState(null);
   const [statusMessage, setStatusMessage] = useState("Backend status pending.");
   const [errorMessage, setErrorMessage] = useState("");
@@ -40,63 +42,217 @@ function App() {
   const [generationForm, setGenerationForm] = useState(generationDefaults);
   const [searchQuery, setSearchQuery] = useState("glute bridge");
 
+  const [users, setUsers] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState("");
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [goals, setGoals] = useState([]);
+  const [workoutPlans, setWorkoutPlans] = useState([]);
   const [generatedWorkout, setGeneratedWorkout] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
   const [isBusy, setIsBusy] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [isHydrating, setIsHydrating] = useState(false);
+  const [isRefreshingUsers, setIsRefreshingUsers] = useState(false);
+
+  const isWorking = isBusy || isHydrating;
 
   useEffect(() => {
-    let active = true;
-
-    async function loadHealth() {
-      try {
-        const payload = await api.health();
-        if (!active) {
-          return;
-        }
-        setHealth(payload);
-        setStatusMessage("Backend connection is healthy.");
-      } catch (error) {
-        if (!active) {
-          return;
-        }
-        setHealth(null);
-        setStatusMessage("Backend is not reachable yet.");
-        setErrorMessage(error.message);
-      }
-    }
-
-    loadHealth();
+    mountedRef.current = true;
+    void bootstrapApp();
 
     return () => {
-      active = false;
+      mountedRef.current = false;
     };
   }, []);
 
   const steps = [
-    { title: "Athlete", value: user ? "Created" : "Pending" },
-    { title: "Profile", value: profile ? "Ready" : "Pending" },
-    { title: "Goal", value: goals.length > 0 ? `${goals.length} active` : "Pending" },
-    { title: "Workout", value: generatedWorkout ? "Generated" : "Pending" },
+    { title: "Athlete", value: user ? "Loaded" : "Pending" },
+    { title: "Profile", value: profile ? "Ready" : "Missing" },
+    { title: "Goal", value: goals.length > 0 ? `${goals.length} active` : "Missing" },
+    { title: "Plans", value: workoutPlans.length > 0 ? `${workoutPlans.length} saved` : "None" },
   ];
+
+  async function bootstrapApp() {
+    setErrorMessage("");
+
+    try {
+      const payload = await api.health();
+      if (!mountedRef.current) {
+        return;
+      }
+      setHealth(payload);
+      setStatusMessage("Backend connection is healthy.");
+    } catch (error) {
+      if (!mountedRef.current) {
+        return;
+      }
+      setHealth(null);
+      setStatusMessage("Backend is not reachable yet.");
+      setErrorMessage(error.message);
+      return;
+    }
+
+    const roster = await refreshUsers({ silent: true });
+    if (!mountedRef.current) {
+      return;
+    }
+
+    if (roster.length === 0) {
+      setStatusMessage("Backend is healthy. Create the first athlete to start the flow.");
+      return;
+    }
+
+    await loadAthleteWorkspace(roster[0].id, {
+      message: `Loaded ${roster[0].full_name} from saved backend data.`,
+    });
+  }
+
+  async function refreshUsers({ silent = false, preferredUserId = null } = {}) {
+    setIsRefreshingUsers(true);
+
+    try {
+      const payload = await api.listUsers();
+      if (!mountedRef.current) {
+        return payload;
+      }
+
+      startTransition(() => {
+        setUsers(payload);
+        setSelectedUserId(
+          preferredUserId || selectedUserId || user?.id || payload[0]?.id || "",
+        );
+      });
+
+      if (!silent) {
+        setStatusMessage(
+          payload.length > 0
+            ? `Roster refreshed. ${payload.length} athlete records available.`
+            : "No athlete records saved yet.",
+        );
+      }
+
+      return payload;
+    } catch (error) {
+      if (!mountedRef.current) {
+        return [];
+      }
+      setErrorMessage(error.message);
+      return [];
+    } finally {
+      if (mountedRef.current) {
+        setIsRefreshingUsers(false);
+      }
+    }
+  }
+
+  async function loadAthleteWorkspace(userId, { message } = {}) {
+    if (!userId) {
+      setErrorMessage("Select an athlete to load.");
+      return;
+    }
+
+    setIsHydrating(true);
+    setErrorMessage("");
+
+    try {
+      const [userRecord, profileRecord, goalsPayload, plansPayload] = await Promise.all([
+        api.getUser(userId),
+        readProfileIfExists(userId),
+        api.listGoals(userId),
+        api.listWorkoutPlans(userId),
+      ]);
+
+      const latestPlan =
+        plansPayload.length > 0 ? await api.getWorkoutPlan(plansPayload[0].id) : null;
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      startTransition(() => {
+        setUser(userRecord);
+        setSelectedUserId(userRecord.id);
+        setProfile(profileRecord);
+        setGoals(goalsPayload);
+        setWorkoutPlans(plansPayload);
+        setGeneratedWorkout(null);
+        setSelectedPlan(latestPlan);
+        setUserForm(mapUserToForm(userRecord));
+        setProfileForm(profileRecord ? mapProfileToForm(profileRecord) : profileDefaults);
+        setGoalForm(goalsPayload[0] ? mapGoalToForm(goalsPayload[0]) : goalDefaults);
+        setGenerationForm(buildGenerationForm(profileRecord));
+      });
+
+      setStatusMessage(message || `Loaded athlete workspace for ${userRecord.full_name}.`);
+    } catch (error) {
+      if (!mountedRef.current) {
+        return;
+      }
+      setErrorMessage(error.message);
+    } finally {
+      if (mountedRef.current) {
+        setIsHydrating(false);
+      }
+    }
+  }
 
   async function handleCreateUser(event) {
     event.preventDefault();
-    await runAction(async () => {
+    setIsBusy(true);
+    setErrorMessage("");
+
+    try {
       const payload = await api.createUser(userForm);
-      setUser(payload);
-      setStatusMessage("Athlete created. Next step: save the profile.");
-    });
+      if (!mountedRef.current) {
+        return;
+      }
+
+      await refreshUsers({ silent: true, preferredUserId: payload.id });
+      await loadAthleteWorkspace(payload.id, {
+        message: "Athlete created. Next step: save the profile.",
+      });
+    } catch (error) {
+      if (!mountedRef.current) {
+        return;
+      }
+
+      setErrorMessage(error.message);
+
+      if (error.message.includes("already exists")) {
+        const roster = await refreshUsers({ silent: true });
+        if (!mountedRef.current) {
+          return;
+        }
+
+        const match = roster.find(
+          (candidate) => candidate.email.toLowerCase() === userForm.email.toLowerCase(),
+        );
+
+        if (match) {
+          startTransition(() => {
+            setSelectedUserId(match.id);
+          });
+          setStatusMessage("Athlete already exists. Load the saved record from the roster.");
+        }
+      }
+    } finally {
+      if (mountedRef.current) {
+        setIsBusy(false);
+      }
+    }
+  }
+
+  async function handleLoadSelectedUser(event) {
+    event.preventDefault();
+    await loadAthleteWorkspace(selectedUserId);
   }
 
   async function handleCreateProfile(event) {
     event.preventDefault();
     if (!user) {
-      setErrorMessage("Create the athlete first.");
+      setErrorMessage("Create or load the athlete first.");
       return;
     }
 
@@ -110,7 +266,13 @@ function App() {
         equipment_access: splitList(profileForm.equipment_access),
         limitations_notes: profileForm.limitations_notes,
       });
-      setProfile(payload);
+
+      startTransition(() => {
+        setProfile(payload);
+        setProfileForm(mapProfileToForm(payload));
+        setGenerationForm(buildGenerationForm(payload));
+      });
+
       setStatusMessage("Profile saved. You can define a goal now.");
     });
   }
@@ -118,7 +280,7 @@ function App() {
   async function handleCreateGoal(event) {
     event.preventDefault();
     if (!user) {
-      setErrorMessage("Create the athlete first.");
+      setErrorMessage("Create or load the athlete first.");
       return;
     }
 
@@ -129,7 +291,12 @@ function App() {
         goal_type: goalForm.goal_type,
         priority: Number(goalForm.priority),
       });
-      setGoals((current) => [payload, ...current]);
+
+      startTransition(() => {
+        setGoals((current) => [payload, ...current]);
+        setGoalForm(mapGoalToForm(payload));
+      });
+
       setStatusMessage("Goal saved. The AI coach can now build a starter plan.");
     });
   }
@@ -137,7 +304,7 @@ function App() {
   async function handleGenerateWorkout(event) {
     event.preventDefault();
     if (!user) {
-      setErrorMessage("Create the athlete before generating a workout.");
+      setErrorMessage("Create or load the athlete before generating a workout.");
       return;
     }
 
@@ -150,9 +317,14 @@ function App() {
         save_plan: Boolean(generationForm.save_plan),
       });
 
+      const plansPayload = payload.saved_workout_plan
+        ? await api.listWorkoutPlans(user.id)
+        : workoutPlans;
+
       startTransition(() => {
         setGeneratedWorkout(payload);
         setSelectedPlan(payload.saved_workout_plan || null);
+        setWorkoutPlans(plansPayload);
       });
 
       setStatusMessage("Starter workout generated successfully.");
@@ -171,40 +343,70 @@ function App() {
 
     try {
       const payload = await api.searchExercises(searchQuery.trim(), 6);
+      if (!mountedRef.current) {
+        return;
+      }
+
       startTransition(() => {
         setSearchResults(payload.results || []);
       });
+
       setStatusMessage(`Search returned ${payload.count} exercise suggestions.`);
     } catch (error) {
-      setErrorMessage(error.message);
+      if (mountedRef.current) {
+        setErrorMessage(error.message);
+      }
     } finally {
-      setIsSearching(false);
+      if (mountedRef.current) {
+        setIsSearching(false);
+      }
     }
   }
 
   async function handleReloadSavedPlan() {
     const savedPlanId = generatedWorkout?.saved_workout_plan?.id || selectedPlan?.id;
-    if (!savedPlanId) {
+    if (!savedPlanId || !user) {
       setErrorMessage("There is no saved plan to refresh yet.");
       return;
     }
 
     await runAction(async () => {
-      const payload = await api.getWorkoutPlan(savedPlanId);
-      setSelectedPlan(payload);
+      const [planPayload, plansPayload] = await Promise.all([
+        api.getWorkoutPlan(savedPlanId),
+        api.listWorkoutPlans(user.id),
+      ]);
+
+      startTransition(() => {
+        setSelectedPlan(planPayload);
+        setWorkoutPlans(plansPayload);
+      });
+
       setStatusMessage("Saved workout plan refreshed from the backend.");
+    });
+  }
+
+  async function handleSelectPlan(planId) {
+    await runAction(async () => {
+      const payload = await api.getWorkoutPlan(planId);
+      setSelectedPlan(payload);
+      setStatusMessage("Saved workout plan loaded.");
     });
   }
 
   async function runAction(action) {
     setIsBusy(true);
     setErrorMessage("");
+
     try {
       await action();
     } catch (error) {
-      setErrorMessage(error.message);
+      if (mountedRef.current) {
+        setErrorMessage(error.message);
+      }
     } finally {
-      setIsBusy(false);
+      if (mountedRef.current) {
+        setIsBusy(false);
+      }
     }
   }
 
@@ -216,11 +418,12 @@ function App() {
       <header className="hero">
         <div className="hero-copy">
           <p className="eyebrow">Hybrid Athlete AI Coach</p>
-          <h1>From athlete setup to a saved starter plan in one screen.</h1>
+          <h1>From saved athlete context to a fresh starter plan in one screen.</h1>
           <p className="hero-text">
-            This frontend bootstraps the current MVP flow on top of the backend we
-            already stabilized: athlete, profile, goal, exercise search, AI workout
-            generation, and saved plan review.
+            The frontend now reconnects to persisted backend data as well as creating
+            new records. You can resume an existing athlete, inspect saved plans, run
+            semantic exercise search, and generate a new starter workout without
+            losing the flow after refresh.
           </p>
         </div>
 
@@ -246,8 +449,77 @@ function App() {
       <main className="content-grid">
         <section className="column">
           <Panel
+            title="0. Resume Workspace"
+            subtitle="Load an athlete already saved in the backend or refresh the roster."
+          >
+            <form className="stack" onSubmit={handleLoadSelectedUser}>
+              <SelectField
+                label="Saved athletes"
+                value={selectedUserId}
+                disabled={users.length === 0 || isWorking}
+                onChange={(value) => setSelectedUserId(value)}
+                hint={
+                  users.length > 0
+                    ? `${users.length} athlete records available.`
+                    : "Create the first athlete below."
+                }
+              >
+                <option value="">Select an athlete</option>
+                {users.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.full_name} - {candidate.email}
+                  </option>
+                ))}
+              </SelectField>
+
+              <div className="button-row">
+                <button
+                  className="secondary-button"
+                  disabled={!selectedUserId || isWorking}
+                  type="submit"
+                >
+                  {isHydrating ? "Loading..." : "Load Athlete"}
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={isRefreshingUsers}
+                  onClick={() => {
+                    void refreshUsers();
+                  }}
+                >
+                  {isRefreshingUsers ? "Refreshing..." : "Refresh Roster"}
+                </button>
+              </div>
+            </form>
+
+            {user ? (
+              <div className="stack compact">
+                <SummaryCard
+                  title={user.full_name}
+                  lines={[
+                    `Email: ${user.email}`,
+                    `Timezone: ${user.timezone}`,
+                    `Created: ${formatDate(user.created_at)}`,
+                  ]}
+                />
+                <div className="badge-grid">
+                  <DataBadge label="Goals" value={String(goals.length)} accent="sage" />
+                  <DataBadge
+                    label="Saved plans"
+                    value={String(workoutPlans.length)}
+                    accent="sky"
+                  />
+                </div>
+              </div>
+            ) : (
+              <Placeholder text="No athlete loaded yet. The most recent saved athlete will load automatically when available." />
+            )}
+          </Panel>
+
+          <Panel
             title="1. Athlete Setup"
-            subtitle="Create the user record that anchors the rest of the flow."
+            subtitle="Create a new athlete record when you want a fresh workspace."
           >
             <form className="stack" onSubmit={handleCreateUser}>
               <Field
@@ -269,14 +541,14 @@ function App() {
                   setUserForm((current) => ({ ...current, timezone: value }))
                 }
               />
-              <button className="action-button" disabled={isBusy}>
+              <button className="action-button" disabled={isWorking}>
                 {isBusy ? "Saving..." : "Create Athlete"}
               </button>
             </form>
             {user ? (
-              <DataBadge label="User ID" value={user.id} accent="sage" />
+              <DataBadge label="Active user" value={user.id} accent="sage" />
             ) : (
-              <Placeholder text="No athlete created yet." />
+              <Placeholder text="Create or load an athlete to unlock the rest of the flow." />
             )}
           </Panel>
 
@@ -338,7 +610,7 @@ function App() {
                   setProfileForm((current) => ({ ...current, limitations_notes: value }))
                 }
               />
-              <button className="action-button" disabled={isBusy || !user}>
+              <button className="action-button" disabled={isWorking || !user}>
                 {isBusy ? "Saving..." : "Save Profile"}
               </button>
             </form>
@@ -354,7 +626,7 @@ function App() {
                 ]}
               />
             ) : (
-              <Placeholder text="Profile will appear here after save." />
+              <Placeholder text="Profile will appear here after save or when loaded from the backend." />
             )}
           </Panel>
 
@@ -382,7 +654,7 @@ function App() {
                   }
                 />
               </InlineFields>
-              <button className="action-button" disabled={isBusy || !user}>
+              <button className="action-button" disabled={isWorking || !user}>
                 {isBusy ? "Saving..." : "Save Goal"}
               </button>
             </form>
@@ -391,16 +663,17 @@ function App() {
                 {goals.map((goal) => (
                   <article className="goal-chip" key={goal.id}>
                     <strong>{goal.title}</strong>
-                    <span>{goal.goal_type}</span>
+                    <span>
+                      {goal.goal_type} / priority {goal.priority}
+                    </span>
                   </article>
                 ))}
               </div>
             ) : (
-              <Placeholder text="Goals will stack here once created." />
+              <Placeholder text="Goals will stack here once created or loaded." />
             )}
           </Panel>
         </section>
-
         <section className="column wide">
           <Panel
             title="4. AI Workout Builder"
@@ -437,7 +710,7 @@ function App() {
                 onChange={(value) =>
                   setGenerationForm((current) => ({ ...current, focus: value }))
                 }
-                hint="Optional. Leave empty to use the saved goal."
+                hint="Optional. Leave empty to use the highest priority saved goal."
               />
               <label className="toggle">
                 <input
@@ -453,13 +726,13 @@ function App() {
                 <span>Persist the generated plan in the backend</span>
               </label>
               <div className="button-row">
-                <button className="action-button" disabled={isBusy || !profile}>
+                <button className="action-button" disabled={isWorking || !profile}>
                   {isBusy ? "Generating..." : "Generate Starter Plan"}
                 </button>
                 <button
                   className="secondary-button"
                   type="button"
-                  disabled={isBusy || !generatedWorkout?.saved_workout_plan}
+                  disabled={isWorking || !generatedWorkout?.saved_workout_plan}
                   onClick={handleReloadSavedPlan}
                 >
                   Refresh Saved Plan
@@ -502,7 +775,11 @@ function App() {
                       {generatedWorkout.context.equipment_access.join(", ") || "n/a"}
                     </li>
                     <li>
-                      Limitations: {generatedWorkout.context.limitations_notes || "none"}
+                      Goal: {generatedWorkout.goal?.title || generationForm.focus || "general"}
+                    </li>
+                    <li>
+                      Search queries:{" "}
+                      {generatedWorkout.search_queries.join(", ") || "none recorded"}
                     </li>
                   </ul>
                 </article>
@@ -513,42 +790,83 @@ function App() {
           </Panel>
 
           <Panel
-            title="Saved Plan Preview"
-            subtitle="What the backend currently persisted for the generated workout."
+            title="Saved Plans"
+            subtitle="Switch between plans already stored for the active athlete."
           >
-            {selectedPlan ? (
-              <div className="days-grid">
-                {groupItemsByDay(selectedPlan.items).map(([day, items]) => (
-                  <article className="day-card" key={day}>
-                    <header className="day-header">
-                      <strong>Day {day}</strong>
-                      <span>{items.length} movements</span>
-                    </header>
-                    <div className="exercise-stack">
-                      {items.map((item) => (
-                        <article
-                          className="exercise-card"
-                          key={item.id || `${item.day_index}-${item.sequence_index}`}
-                        >
-                          <div className="exercise-topline">
-                            <strong>{item.exercise_name}</strong>
-                            <span>
-                              {item.prescribed_sets || "-"} x {item.prescribed_reps || "-"}
-                            </span>
-                          </div>
-                          <p className="exercise-note">
-                            Rest {item.rest_seconds || "-"} sec, target RPE{" "}
-                            {item.target_rpe || "n/a"}.
-                          </p>
-                          {item.notes ? <p className="micro-copy">{item.notes}</p> : null}
-                        </article>
-                      ))}
-                    </div>
-                  </article>
+            {workoutPlans.length > 0 ? (
+              <div className="plan-list">
+                {workoutPlans.map((plan) => (
+                  <button
+                    className={`plan-list-item ${
+                      selectedPlan?.id === plan.id ? "is-active" : ""
+                    }`}
+                    key={plan.id}
+                    onClick={() => {
+                      void handleSelectPlan(plan.id);
+                    }}
+                    type="button"
+                  >
+                    <strong>{plan.title}</strong>
+                    <span>
+                      {plan.focus || "general focus"} / {plan.sessions_per_week || "?"} sessions
+                    </span>
+                    <small>{formatDate(plan.created_at)}</small>
+                  </button>
                 ))}
               </div>
             ) : (
-              <Placeholder text="Saved plan details will appear here after generation." />
+              <Placeholder text="No saved plans yet for the active athlete." />
+            )}
+          </Panel>
+
+          <Panel
+            title="Saved Plan Preview"
+            subtitle="What the backend currently persisted for the selected workout plan."
+          >
+            {selectedPlan ? (
+              <div className="stack">
+                <SummaryCard
+                  title={selectedPlan.title}
+                  lines={[
+                    `Focus: ${selectedPlan.focus || "n/a"}`,
+                    `Duration: ${selectedPlan.duration_weeks || "?"} weeks`,
+                    `Sessions per week: ${selectedPlan.sessions_per_week || "?"}`,
+                  ]}
+                />
+
+                <div className="days-grid">
+                  {groupItemsByDay(selectedPlan.items).map(([day, items]) => (
+                    <article className="day-card" key={day}>
+                      <header className="day-header">
+                        <strong>Day {day}</strong>
+                        <span>{items.length} movements</span>
+                      </header>
+                      <div className="exercise-stack">
+                        {items.map((item) => (
+                          <article
+                            className="exercise-card"
+                            key={item.id || `${item.day_index}-${item.sequence_index}`}
+                          >
+                            <div className="exercise-topline">
+                              <strong>{item.exercise_name}</strong>
+                              <span>
+                                {item.prescribed_sets || "-"} x {item.prescribed_reps || "-"}
+                              </span>
+                            </div>
+                            <p className="exercise-note">
+                              Rest {item.rest_seconds || "-"} sec, target RPE{" "}
+                              {item.target_rpe || "n/a"}.
+                            </p>
+                            {item.notes ? <p className="micro-copy">{item.notes}</p> : null}
+                          </article>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <Placeholder text="Saved plan details will appear here after loading or generation." />
             )}
           </Panel>
 
@@ -574,7 +892,7 @@ function App() {
                   <article className="search-card" key={result.id}>
                     <strong>{result.name}</strong>
                     <p className="micro-copy">
-                      {(result.primary_muscles || []).join(", ") || "general"} •{" "}
+                      {(result.primary_muscles || []).join(", ") || "general"} /{" "}
                       {result.equipment || "no equipment"}
                     </p>
                   </article>
@@ -607,6 +925,18 @@ function Field({ label, hint, type = "text", value, onChange }) {
     <label className="field">
       <span>{label}</span>
       <input type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+      {hint ? <small>{hint}</small> : null}
+    </label>
+  );
+}
+
+function SelectField({ label, hint, value, onChange, children, disabled = false }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)}>
+        {children}
+      </select>
       {hint ? <small>{hint}</small> : null}
     </label>
   );
@@ -659,6 +989,68 @@ function groupItemsByDay(items = []) {
   }
 
   return Array.from(groups.entries()).sort((left, right) => left[0] - right[0]);
+}
+
+function mapUserToForm(userRecord) {
+  return {
+    email: userRecord.email || "",
+    full_name: userRecord.full_name || "",
+    timezone: userRecord.timezone || "UTC",
+  };
+}
+
+function mapProfileToForm(profileRecord) {
+  return {
+    primary_sport: profileRecord.primary_sport || profileDefaults.primary_sport,
+    experience_level: profileRecord.experience_level || profileDefaults.experience_level,
+    training_days_per_week:
+      profileRecord.training_days_per_week || profileDefaults.training_days_per_week,
+    session_duration_minutes:
+      profileRecord.session_duration_minutes || profileDefaults.session_duration_minutes,
+    equipment_access:
+      (profileRecord.equipment_access || []).join(", ") || profileDefaults.equipment_access,
+    limitations_notes:
+      profileRecord.limitations_notes || profileDefaults.limitations_notes,
+  };
+}
+
+function mapGoalToForm(goalRecord) {
+  return {
+    title: goalRecord.title || goalDefaults.title,
+    goal_type: goalRecord.goal_type || goalDefaults.goal_type,
+    priority: goalRecord.priority || goalDefaults.priority,
+  };
+}
+
+function buildGenerationForm(profileRecord) {
+  return {
+    ...generationDefaults,
+    sessions_per_week:
+      profileRecord?.training_days_per_week || generationDefaults.sessions_per_week,
+  };
+}
+
+async function readProfileIfExists(userId) {
+  try {
+    return await api.getProfile(userId);
+  } catch (error) {
+    if (error.message === "Profile not found.") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function formatDate(value) {
+  if (!value) {
+    return "n/a";
+  }
+
+  try {
+    return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(new Date(value));
+  } catch {
+    return String(value);
+  }
 }
 
 export default App;
