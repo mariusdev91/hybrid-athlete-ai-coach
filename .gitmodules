@@ -1,0 +1,6 @@
+[submodule "backend/app/db/free-exercise-db"]
+	path = backend/app/db/free-exercise-db
+	url = https://github.com/yuhonas/free-exercise-db
+[submodule "backend/app/db/open-exercise-db"]
+	path = backend/app/db/open-exercise-db
+	url = https://github.com/zohar-ui/open-exercise-db
