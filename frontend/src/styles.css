@@ -35,7 +35,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -257,6 +258,7 @@ input {
 }
 
 .field input,
+.field select,
 .search-input {
   width: 100%;
   border: 1px solid rgba(19, 33, 24, 0.1);
@@ -268,6 +270,7 @@ input {
 }
 
 .field input:focus,
+.field select:focus,
 .search-input:focus {
   outline: none;
   border-color: rgba(79, 124, 101, 0.6);
@@ -332,6 +335,8 @@ input {
 
 .goal-list,
 .plan-meta,
+.plan-list,
+.badge-grid,
 .search-grid,
 .exercise-stack {
   display: grid;
@@ -357,6 +362,10 @@ input {
 
 .goal-chip span {
   color: var(--muted);
+}
+
+.badge-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .plain-list {
@@ -422,6 +431,43 @@ input {
 .day-header span,
 .exercise-note {
   color: var(--muted);
+}
+
+.plan-list {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.plan-list-item {
+  text-align: left;
+  border: 1px solid rgba(19, 33, 24, 0.1);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 16px;
+  display: grid;
+  gap: 6px;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.plan-list-item strong {
+  font-family: "Space Grotesk", sans-serif;
+  color: var(--ink);
+}
+
+.plan-list-item span,
+.plan-list-item small {
+  color: var(--muted);
+}
+
+.plan-list-item:hover {
+  transform: translateY(-2px);
+  border-color: rgba(79, 124, 101, 0.32);
+}
+
+.plan-list-item.is-active {
+  border-color: rgba(79, 124, 101, 0.55);
+  box-shadow: 0 14px 30px rgba(79, 124, 101, 0.14);
+  background: rgba(234, 245, 239, 0.9);
 }
 
 .search-grid {

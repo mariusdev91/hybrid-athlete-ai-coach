@@ -36,6 +36,9 @@ export const api = {
   listUsers() {
     return request("/db/users");
   },
+  getUser(userId) {
+    return request(`/db/users/${userId}`);
+  },
   createUser(payload) {
     return request("/db/users", {
       method: "POST",
