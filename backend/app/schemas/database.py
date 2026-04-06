@@ -163,7 +163,10 @@ class WorkoutPlanDetailRead(WorkoutPlanRead):
 class WorkoutSessionCreate(BaseModel):
     user_id: str
     workout_plan_id: str | None = None
-    title: str
+    week_index: int | None = Field(default=None, ge=1)
+    day_index: int | None = Field(default=None, ge=1)
+    session_label: str | None = None
+    title: str | None = None
     status: str = "completed"
     performed_at: datetime | None = None
     duration_minutes: int | None = Field(default=None, ge=0)
@@ -175,6 +178,9 @@ class WorkoutSessionRead(ORMBaseModel):
     id: str
     user_id: str
     workout_plan_id: str | None = None
+    week_index: int | None = None
+    day_index: int | None = None
+    session_label: str | None = None
     title: str
     status: str
     performed_at: datetime | None = None

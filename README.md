@@ -11,6 +11,7 @@ Right now the product supports an MVP flow across both layers:
 - goal creation and review
 - workout plan persistence
 - workout plan calendar view on a dedicated page
+- session tracking directly from the workout calendar
 - Excel export split by training week
 - semantic exercise search over a local exercise database
 - Bompa-inspired AI workout generation and saved plan review
@@ -91,7 +92,7 @@ npm run dev
 
 The frontend expects the backend to be running on `http://127.0.0.1:8000` by default. Override `VITE_API_BASE_URL` in `frontend/.env` if needed.
 
-The saved workout plan can now be opened on a dedicated calendar page from the dashboard, and downloaded as an Excel workbook with one sheet per week.
+The saved workout plan can now be opened on a dedicated calendar page from the dashboard, logged day by day, and downloaded as an Excel workbook with one sheet per week.
 
 ## Useful Endpoints
 
@@ -113,6 +114,7 @@ The saved workout plan can now be opened on a dedicated calendar page from the d
 - `GET /db/users/{user_id}/workout-plans`
 - `GET /db/workout-plans/{workout_plan_id}`
 - `GET /db/workout-plans/{workout_plan_id}/items`
+- `GET /db/workout-plans/{workout_plan_id}/sessions`
 - `POST /db/workout-sessions`
 - `GET /db/users/{user_id}/workout-sessions`
 
@@ -130,7 +132,7 @@ You can also generate a starter workout plan from the saved athlete profile and 
 
 ## Notes
 
-- The frontend currently covers the MVP flow in one screen: athlete, profile, goals, exercise search, AI generation, and saved plan review.
+- The frontend currently covers the MVP flow in one screen: athlete, profile, goals, exercise search, AI generation, saved plan review, plus day-by-day session logging on the dedicated plan page.
 - Generated plans now include week-by-week periodization metadata so the UI can render a multi-week calendar and week-based Excel export.
 - The current periodization engine is Bompa-inspired: it progresses through adaptation, accumulation, intensification, and realization phases across the saved plan.
 - Exercise data is generated from the submodules declared in `.gitmodules`.

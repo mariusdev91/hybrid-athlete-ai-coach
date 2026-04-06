@@ -126,12 +126,14 @@ def test_domain_flow_create_and_read(client):
         json={
             "user_id": user_id,
             "workout_plan_id": plan_id,
-            "title": "Day 1 Complete",
+            "week_index": 1,
+            "day_index": 1,
             "status": "completed",
             "duration_minutes": 48,
             "perceived_exertion": 7,
         },
     )
+    plan_sessions = client.get(f"/db/workout-plans/{plan_id}/sessions")
     profile_read = client.get(f"/db/users/{user_id}/profile")
     goals_read = client.get(f"/db/users/{user_id}/goals")
     plans_read = client.get(f"/db/users/{user_id}/workout-plans")
@@ -147,12 +149,19 @@ def test_domain_flow_create_and_read(client):
 
     assert sessions.status_code == 201
     assert sessions.json()["workout_plan_id"] == plan_id
+    assert sessions.json()["week_index"] == 1
+    assert sessions.json()["day_index"] == 1
+    assert sessions.json()["session_label"] == "Lower Body Strength"
+    assert sessions.json()["title"] == "Lower Body Strength"
 
     assert profile_read.status_code == 200
     assert goals_read.status_code == 200
     assert len(goals_read.json()) == 1
     assert plans_read.status_code == 200
     assert len(plans_read.json()) == 1
+    assert plan_sessions.status_code == 200
+    assert len(plan_sessions.json()) == 1
+    assert plan_sessions.json()[0]["session_label"] == "Lower Body Strength"
     assert sessions_read.status_code == 200
     assert len(sessions_read.json()) == 1
 

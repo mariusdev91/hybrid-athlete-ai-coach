@@ -1,3 +1,6 @@
+from datetime import UTC
+from datetime import datetime
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -73,6 +76,37 @@ def validate_workout_plan_belongs_to_user(db: Session, workout_plan_id: str, use
     if plan.user_id != user_id:
         raise HTTPException(status_code=400, detail="Workout plan does not belong to the user.")
     return plan
+
+
+def get_workout_session_or_404(db: Session, workout_session_id: str) -> WorkoutSession:
+    session = db.get(WorkoutSession, workout_session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Workout session not found.")
+    return session
+
+
+def resolve_plan_day_metadata(
+    db: Session,
+    workout_plan_id: str,
+    week_index: int | None,
+    day_index: int | None,
+) -> tuple[int | None, int | None, str | None]:
+    if week_index is None or day_index is None:
+        return week_index, day_index, None
+
+    reference_item = db.scalar(
+        select(WorkoutPlanItem)
+        .where(
+            WorkoutPlanItem.workout_plan_id == workout_plan_id,
+            WorkoutPlanItem.week_index == week_index,
+            WorkoutPlanItem.day_index == day_index,
+        )
+        .order_by(WorkoutPlanItem.sequence_index.asc())
+    )
+    if not reference_item:
+        raise HTTPException(status_code=400, detail="Plan day does not exist for the workout plan.")
+
+    return week_index, day_index, reference_item.session_label or f"Week {week_index} Day {day_index}"
 
 
 @router.get("/health")
@@ -263,15 +297,49 @@ def list_workout_plan_items(workout_plan_id: str, db: Session = Depends(get_db))
 @router.post("/workout-sessions", response_model=WorkoutSessionRead, status_code=201)
 def create_workout_session(payload: WorkoutSessionCreate, db: Session = Depends(get_db)):
     get_user_or_404(db, payload.user_id)
+    payload_data = payload.model_dump()
+    session_label = payload_data.get("session_label")
+    title = payload_data.get("title")
 
     if payload.workout_plan_id:
         validate_workout_plan_belongs_to_user(db, payload.workout_plan_id, payload.user_id)
+        week_index, day_index, derived_label = resolve_plan_day_metadata(
+            db,
+            payload.workout_plan_id,
+            payload.week_index,
+            payload.day_index,
+        )
+        payload_data["week_index"] = week_index
+        payload_data["day_index"] = day_index
+        payload_data["session_label"] = session_label or derived_label
+    else:
+        payload_data["session_label"] = session_label
 
-    session = WorkoutSession(**payload.model_dump())
+    payload_data["title"] = title or payload_data["session_label"] or "Workout Session"
+    payload_data["performed_at"] = payload.performed_at or datetime.now(UTC)
+
+    session = WorkoutSession(**payload_data)
     db.add(session)
     db.commit()
     db.refresh(session)
     return session
+
+
+@router.get("/workout-plans/{workout_plan_id}/sessions", response_model=list[WorkoutSessionRead])
+def list_workout_sessions_for_plan(workout_plan_id: str, db: Session = Depends(get_db)):
+    get_workout_plan_or_404(db, workout_plan_id)
+    return list(
+        db.scalars(
+            select(WorkoutSession)
+            .where(WorkoutSession.workout_plan_id == workout_plan_id)
+            .order_by(
+                WorkoutSession.week_index.asc().nulls_last(),
+                WorkoutSession.day_index.asc().nulls_last(),
+                WorkoutSession.performed_at.desc().nulls_last(),
+                WorkoutSession.created_at.desc(),
+            )
+        )
+    )
 
 
 @router.get("/users/{user_id}/workout-sessions", response_model=list[WorkoutSessionRead])
@@ -288,7 +356,4 @@ def list_workout_sessions_for_user(user_id: str, db: Session = Depends(get_db)):
 
 @router.get("/workout-sessions/{workout_session_id}", response_model=WorkoutSessionRead)
 def get_workout_session(workout_session_id: str, db: Session = Depends(get_db)):
-    session = db.get(WorkoutSession, workout_session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Workout session not found.")
-    return session
+    return get_workout_session_or_404(db, workout_session_id)
