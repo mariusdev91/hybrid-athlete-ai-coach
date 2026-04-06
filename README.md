@@ -60,6 +60,16 @@ Start the API:
 
 The API bootstraps the vector store at startup. If the FAISS index is missing, it is rebuilt from `backend/app/db/exercises.json` and then cached under `backend/app/db/vector_store/`.
 
+## Automated Tests
+
+Install dev dependencies and run the smoke tests:
+
+```powershell
+python -m pip install -r backend\requirements-dev.txt
+Set-Location backend
+..\.venv\Scripts\python.exe -m pytest
+```
+
 ## Useful Endpoints
 
 - `GET /`
