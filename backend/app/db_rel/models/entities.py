@@ -187,6 +187,9 @@ class WorkoutSession(TimestampMixin, Base):
         nullable=True,
         index=True,
     )
+    week_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    day_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    session_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="completed", nullable=False)
     performed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

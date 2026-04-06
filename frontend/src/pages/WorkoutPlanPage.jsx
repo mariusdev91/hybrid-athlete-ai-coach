@@ -6,27 +6,39 @@ import { api } from "../services/api.js";
 function WorkoutPlanPage() {
   const { planId } = useParams();
   const [plan, setPlan] = useState(null);
+  const [workoutSessions, setWorkoutSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingSession, setIsSavingSession] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [sessionStatusMessage, setSessionStatusMessage] = useState("");
   const [selectedSessionKey, setSelectedSessionKey] = useState("");
+  const [sessionForm, setSessionForm] = useState(buildDefaultSessionForm());
 
   const calendar = buildPlanCalendar(plan);
   const overview = getPlanOverview(plan);
   const selectedSession = findSession(calendar, selectedSessionKey);
+  const sessionLogIndex = buildSessionLogIndex(workoutSessions);
+  const selectedSessionLogs = getLogsForSession(workoutSessions, selectedSession);
+  const loggedDayCount = Object.keys(sessionLogIndex).length;
 
   useEffect(() => {
     let active = true;
 
-    async function loadPlan() {
+    async function loadPlanWorkspace() {
       setIsLoading(true);
       setErrorMessage("");
+      setSessionStatusMessage("");
 
       try {
-        const payload = await api.getWorkoutPlan(planId);
+        const [planPayload, sessionsPayload] = await Promise.all([
+          api.getWorkoutPlan(planId),
+          api.listWorkoutPlanSessions(planId),
+        ]);
         if (!active) {
           return;
         }
-        setPlan(payload);
+        setPlan(planPayload);
+        setWorkoutSessions(sessionsPayload);
       } catch (error) {
         if (!active) {
           return;
@@ -39,7 +51,7 @@ function WorkoutPlanPage() {
       }
     }
 
-    void loadPlan();
+    void loadPlanWorkspace();
 
     return () => {
       active = false;
@@ -56,6 +68,15 @@ function WorkoutPlanPage() {
     }
   }, [calendar, selectedSessionKey]);
 
+  useEffect(() => {
+    if (!selectedSessionKey) {
+      return;
+    }
+
+    setSessionStatusMessage("");
+    setSessionForm(buildDefaultSessionForm());
+  }, [selectedSessionKey]);
+
   async function handleDownloadWorkbook() {
     if (!plan) {
       return;
@@ -63,6 +84,46 @@ function WorkoutPlanPage() {
 
     const { downloadPlanWorkbook } = await import("../lib/plan-export.js");
     downloadPlanWorkbook(plan);
+  }
+
+  async function handleLogSession(event) {
+    event.preventDefault();
+    if (!plan || !selectedSession) {
+      return;
+    }
+
+    setIsSavingSession(true);
+    setErrorMessage("");
+    setSessionStatusMessage("");
+
+    try {
+      await api.createWorkoutSession({
+        user_id: plan.user_id,
+        workout_plan_id: plan.id,
+        week_index: selectedSession.weekIndex,
+        day_index: selectedSession.dayIndex,
+        session_label: selectedSession.sessionLabel,
+        title: selectedSession.sessionLabel,
+        status: sessionForm.status,
+        duration_minutes: coerceNumber(sessionForm.duration_minutes),
+        perceived_exertion: coerceNumber(sessionForm.perceived_exertion),
+        notes: sessionForm.notes.trim() || null,
+      });
+
+      const sessionsPayload = await api.listWorkoutPlanSessions(plan.id);
+      setWorkoutSessions(sessionsPayload);
+      setSessionForm((current) => ({
+        ...current,
+        duration_minutes: "",
+        perceived_exertion: "",
+        notes: "",
+      }));
+      setSessionStatusMessage("Session logged for the selected training day.");
+    } catch (error) {
+      setErrorMessage(error.message);
+    } finally {
+      setIsSavingSession(false);
+    }
   }
 
   return (
@@ -76,7 +137,8 @@ function WorkoutPlanPage() {
           <h1>See the whole cycle, then drill into any training day.</h1>
           <p className="hero-text">
             This page turns the saved plan into a weekly calendar view, with one-click
-            detail for each training day and an Excel export split into weekly sheets.
+            detail for each training day, a real session log, and an Excel export split
+            into weekly sheets.
           </p>
           <div className="button-row">
             <Link className="secondary-link" to="/">
@@ -111,8 +173,8 @@ function WorkoutPlanPage() {
                 <strong>{overview.totalExercises}</strong>
               </article>
               <article className="status-card">
-                <span className="status-label">Plan Status</span>
-                <strong>{plan.status}</strong>
+                <span className="status-label">Logged Days</span>
+                <strong>{loggedDayCount}</strong>
               </article>
             </div>
           ) : (
@@ -122,6 +184,7 @@ function WorkoutPlanPage() {
       </header>
 
       {errorMessage ? <div className="banner error">{errorMessage}</div> : null}
+      {sessionStatusMessage ? <div className="banner success">{sessionStatusMessage}</div> : null}
 
       <main className="plan-page-grid">
         <section className="panel">
@@ -160,6 +223,20 @@ function WorkoutPlanPage() {
                         </div>
                         <h4>{session.sessionLabel}</h4>
                         <p>{session.sessionFocus}</p>
+                        <div className="calendar-session-state">
+                          {sessionLogIndex[session.key] ? (
+                            <>
+                              <span
+                                className={`session-pill status-${sessionLogIndex[session.key].latestStatus}`}
+                              >
+                                {formatSessionStatus(sessionLogIndex[session.key].latestStatus)}
+                              </span>
+                              <span>{sessionLogIndex[session.key].count} logs</span>
+                            </>
+                          ) : (
+                            <span className="session-pill status-pending">Not logged yet</span>
+                          )}
+                        </div>
                         <div className="calendar-exercise-preview">
                           {session.items.slice(0, 3).map((item) => (
                             <span key={item.id || `${session.key}-${item.sequence_index}`}>
@@ -194,6 +271,111 @@ function WorkoutPlanPage() {
                   ))}
                 </ul>
               </div>
+
+              <section className="summary-card">
+                <strong>Session Tracking</strong>
+                <p className="micro-copy">
+                  Log completion, duration, RPE, or notes for this exact training day.
+                </p>
+
+                <form className="stack" onSubmit={handleLogSession}>
+                  <div className="inline-fields">
+                    <label className="field">
+                      <span>Status</span>
+                      <select
+                        onChange={(event) =>
+                          setSessionForm((current) => ({
+                            ...current,
+                            status: event.target.value,
+                          }))
+                        }
+                        value={sessionForm.status}
+                      >
+                        <option value="completed">Completed</option>
+                        <option value="modified">Modified</option>
+                        <option value="skipped">Skipped</option>
+                      </select>
+                    </label>
+
+                    <label className="field">
+                      <span>Duration Minutes</span>
+                      <input
+                        min="0"
+                        onChange={(event) =>
+                          setSessionForm((current) => ({
+                            ...current,
+                            duration_minutes: event.target.value,
+                          }))
+                        }
+                        type="number"
+                        value={sessionForm.duration_minutes}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="inline-fields">
+                    <label className="field">
+                      <span>Session RPE</span>
+                      <input
+                        max="10"
+                        min="1"
+                        onChange={(event) =>
+                          setSessionForm((current) => ({
+                            ...current,
+                            perceived_exertion: event.target.value,
+                          }))
+                        }
+                        type="number"
+                        value={sessionForm.perceived_exertion}
+                      />
+                    </label>
+                  </div>
+
+                  <label className="field">
+                    <span>Notes</span>
+                    <textarea
+                      onChange={(event) =>
+                        setSessionForm((current) => ({
+                          ...current,
+                          notes: event.target.value,
+                        }))
+                      }
+                      placeholder="How did the session feel? Any swaps or pain notes?"
+                      rows="4"
+                      value={sessionForm.notes}
+                    />
+                  </label>
+
+                  <div className="button-row">
+                    <button className="action-button" disabled={isSavingSession} type="submit">
+                      {isSavingSession ? "Saving..." : "Log Session"}
+                    </button>
+                  </div>
+                </form>
+              </section>
+
+              <section className="summary-card">
+                <strong>Logged History</strong>
+                {selectedSessionLogs.length > 0 ? (
+                  <div className="session-log-list">
+                    {selectedSessionLogs.map((sessionLog) => (
+                      <article className="session-log-item" key={sessionLog.id}>
+                        <div className="exercise-topline">
+                          <strong>{formatSessionStatus(sessionLog.status)}</strong>
+                          <span>{formatTimestamp(sessionLog.performed_at)}</span>
+                        </div>
+                        <p className="micro-copy">
+                          Duration {sessionLog.duration_minutes || "-"} min, RPE{" "}
+                          {sessionLog.perceived_exertion || "n/a"}.
+                        </p>
+                        {sessionLog.notes ? <p className="micro-copy">{sessionLog.notes}</p> : null}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="placeholder">No session has been logged for this day yet.</div>
+                )}
+              </section>
 
               {selectedSession.items.map((item) => (
                 <article
@@ -232,6 +414,82 @@ function findSession(calendar, sessionKey) {
   }
 
   return null;
+}
+
+function buildDefaultSessionForm() {
+  return {
+    status: "completed",
+    duration_minutes: "",
+    perceived_exertion: "",
+    notes: "",
+  };
+}
+
+function buildSessionLogIndex(workoutSessions = []) {
+  const index = {};
+
+  for (const session of workoutSessions) {
+    const key = `${session.week_index || 1}-${session.day_index || 1}`;
+    const current = index[key];
+
+    if (!current) {
+      index[key] = {
+        count: 1,
+        latestStatus: session.status || "completed",
+      };
+      continue;
+    }
+
+    index[key] = {
+      ...current,
+      count: current.count + 1,
+    };
+  }
+
+  return index;
+}
+
+function getLogsForSession(workoutSessions = [], session) {
+  if (!session) {
+    return [];
+  }
+
+  return workoutSessions.filter(
+    (item) =>
+      (item.week_index || 1) === session.weekIndex && (item.day_index || 1) === session.dayIndex,
+  );
+}
+
+function coerceNumber(value) {
+  if (value === "" || value === null || value === undefined) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatSessionStatus(value) {
+  if (!value) {
+    return "Completed";
+  }
+
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatTimestamp(value) {
+  if (!value) {
+    return "Just now";
+  }
+
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value));
+  } catch {
+    return String(value);
+  }
 }
 
 export default WorkoutPlanPage;

@@ -36,7 +36,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -211,6 +212,12 @@ a {
   color: var(--error);
 }
 
+.banner.success {
+  color: var(--sage);
+  border-color: rgba(79, 124, 101, 0.18);
+  background: rgba(239, 249, 243, 0.92);
+}
+
 .content-grid {
   display: grid;
   gap: 22px;
@@ -264,6 +271,7 @@ a {
 
 .field input,
 .field select,
+.field textarea,
 .search-input {
   width: 100%;
   border: 1px solid rgba(19, 33, 24, 0.1);
@@ -276,11 +284,17 @@ a {
 
 .field input:focus,
 .field select:focus,
+.field textarea:focus,
 .search-input:focus {
   outline: none;
   border-color: rgba(79, 124, 101, 0.6);
   box-shadow: 0 0 0 4px rgba(79, 124, 101, 0.12);
   transform: translateY(-1px);
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 110px;
 }
 
 .button-row,
@@ -509,13 +523,68 @@ a {
   gap: 6px;
 }
 
+.calendar-session-state {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .calendar-exercise-preview span {
   color: var(--ink);
   font-size: 0.92rem;
 }
 
+.session-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid rgba(19, 33, 24, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.session-pill.status-completed {
+  background: rgba(79, 124, 101, 0.14);
+  color: #29533f;
+}
+
+.session-pill.status-modified {
+  background: rgba(197, 139, 38, 0.18);
+  color: #7a5312;
+}
+
+.session-pill.status-skipped {
+  background: rgba(178, 84, 50, 0.14);
+  color: #8a3620;
+}
+
+.session-pill.status-pending {
+  background: rgba(63, 110, 120, 0.1);
+  color: #31545b;
+}
+
 .sticky-panel {
   align-self: start;
+}
+
+.session-log-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.session-log-item {
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(19, 33, 24, 0.08);
 }
 
 .hero-plan h2 {

@@ -81,4 +81,13 @@ export const api = {
   getWorkoutPlan(planId) {
     return request(`/db/workout-plans/${planId}`);
   },
+  listWorkoutPlanSessions(planId) {
+    return request(`/db/workout-plans/${planId}/sessions`);
+  },
+  createWorkoutSession(payload) {
+    return request("/db/workout-sessions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
 };
