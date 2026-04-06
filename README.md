@@ -68,6 +68,7 @@ The API bootstraps the vector store at startup. If the FAISS index is missing, i
 - `GET /test/ai?query=glute workout`
 - `GET /admin/vector-store/status`
 - `POST /admin/vector-store/rebuild`
+- `POST /ai/users/{user_id}/generate-workout`
 - `POST /db/users`
 - `POST /db/profiles`
 - `POST /db/goals`
@@ -89,6 +90,8 @@ The current backend supports this end-to-end flow:
 3. Add one or more goals.
 4. Create a workout plan, optionally with plan items in the same request.
 5. Record completed workout sessions linked to the plan.
+
+You can also generate a starter workout plan from the saved athlete profile and goal with `POST /ai/users/{user_id}/generate-workout`.
 
 ## Notes
 
