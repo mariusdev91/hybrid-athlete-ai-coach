@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from app.api.routes.admin import router as admin_router
+from app.api.routes.ai import router as ai_router
 from app.api.routes.database import router as database_router
 from app.api.routes.exercises import router as exercises_router
 from app.core.exercise_index import bootstrap_vector_store
@@ -21,6 +22,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="Hybrid Athlete AI Coach", lifespan=lifespan)
 
+app.include_router(ai_router, prefix="/ai", tags=["AI"])
 app.include_router(exercises_router, prefix="/exercises", tags=["Exercises"])
 app.include_router(database_router, prefix="/db", tags=["Database"])
 app.include_router(admin_router, prefix="/admin", tags=["Admin"])
