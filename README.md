@@ -47,6 +47,10 @@ Create the backend environment file:
 Copy-Item backend\.env.example backend\.env
 ```
 
+The default backend configuration already allows local frontend origins such as
+`http://127.0.0.1:4173` and `http://127.0.0.1:5173`. Override
+`CORS_ALLOWED_ORIGINS` in `backend/.env` if your frontend runs elsewhere.
+
 Run database migrations:
 
 ```powershell
