@@ -205,3 +205,28 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+backend/venv/
+
+# Vector store (generated)
+backend/app/db/vector_store/
+*.npy
+*.faiss
+
+# Free Exercise DB (submodule content)
+backend/app/db/free-exercise-db/
+
+# HuggingFace cache
+~/.cache/huggingface/
+
+# VSCode
+.vscode/
+
+# OS files
+.DS_Store
