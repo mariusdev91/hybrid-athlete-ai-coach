@@ -7,3 +7,4 @@ alembic
 sentence-transformers
 faiss-cpu
 numpy
+jsonschema
