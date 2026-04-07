@@ -1,9 +1,13 @@
 from datetime import date
+from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 from pydantic import Field
 
+from app.schemas.database import ORMBaseModel
 from app.schemas.database import GoalRead
+from app.schemas.database import UserRead
 from app.schemas.database import WorkoutPlanDetailRead
 
 
@@ -118,3 +122,80 @@ class WorkoutPlanPreviewResponse(BaseModel):
     context: WorkoutGenerationContext
     preview_goal: WorkoutPlanPreviewGoal
     preview_plan: GeneratedWorkoutPlan
+
+
+PlanTrack = Literal["sport", "training_mode"]
+ConversationStatus = Literal["collecting", "preview_ready", "confirmed"]
+ConversationMessageRole = Literal["assistant", "user"]
+
+
+class ConversationIntakeState(BaseModel):
+    plan_track: PlanTrack | None = None
+    request_text: str = ""
+    full_name: str = ""
+    age_years: int | None = Field(default=None, ge=1, le=120)
+    gender: str | None = None
+    height_cm: int | None = Field(default=None, ge=80, le=260)
+    weight_kg: float | None = Field(default=None, gt=20, le=400)
+    primary_sport: str = ""
+    sport_position: str = ""
+    season_phase: str = ""
+    weekly_competitions: int | None = Field(default=None, ge=0, le=7)
+    experience_level: str = ""
+    training_days_per_week: int = Field(default=4, ge=1, le=7)
+    session_duration_minutes: int = Field(default=60, ge=15, le=240)
+    equipment_access: list[str] = Field(default_factory=list)
+    performance_priorities: list[str] = Field(default_factory=list)
+    training_mode: str = ""
+    goal_title: str = ""
+    goal_type: str = "performance"
+    limitations_notes: str = ""
+    duration_weeks: int = Field(default=4, ge=1, le=16)
+    start_date: date | None = None
+    timezone: str = "UTC"
+
+
+class ConversationCreateRequest(BaseModel):
+    plan_track: PlanTrack
+    timezone: str = "UTC"
+
+
+class ConversationMessageCreate(BaseModel):
+    content: str = Field(min_length=1)
+
+
+class ConversationMessageRead(ORMBaseModel):
+    id: str
+    role: ConversationMessageRole
+    content: str
+    sequence_index: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationRead(ORMBaseModel):
+    id: str
+    user_id: str | None = None
+    confirmed_workout_plan_id: str | None = None
+    plan_track: PlanTrack
+    status: ConversationStatus
+    timezone: str
+    current_step_index: int
+    current_prompt: str | None = None
+    status_message: str
+    is_locked: bool
+    intake: ConversationIntakeState
+    preview: WorkoutPlanPreviewResponse | None = None
+    messages: list[ConversationMessageRead] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationConfirmResponse(BaseModel):
+    conversation: ConversationRead
+    user: UserRead
+    goal: GoalRead
+    saved_workout_plan: WorkoutPlanDetailRead
+    generated_plan: GeneratedWorkoutPlan
+    context: WorkoutGenerationContext
+    search_queries: list[str] = Field(default_factory=list)

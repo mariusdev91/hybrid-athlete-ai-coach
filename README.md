@@ -204,6 +204,8 @@ The frontend expects the backend to be running on `http://127.0.0.1:8000` by def
 
 The root route `/` now serves a guided chat intake flow that builds a workout preview before persistence. The legacy form-based workspace remains available at `/workspace`.
 
+The guided chat is now backend-backed: the conversation transcript, intake state, and preview are persisted in the relational database. The frontend keeps only the active `conversation_id` in session storage so the flow can survive navigation to and from the plan calendar.
+
 After confirmation, the saved workout plan opens on a dedicated monthly calendar page, can be logged day by day, and can be downloaded as an Excel workbook with one sheet per week.
 
 For basketball-focused or football-focused workflows, the backend can now use optional profile or AI input fields such as `sport_position`, `season_phase`, `weekly_competitions`, and `performance_priorities` to switch from the generic hybrid plan builder to a sport-specific support module.
@@ -216,6 +218,10 @@ For basketball-focused or football-focused workflows, the backend can now use op
 - `GET /test/ai?query=glute workout`
 - `GET /admin/vector-store/status`
 - `POST /admin/vector-store/rebuild`
+- `POST /ai/conversations`
+- `GET /ai/conversations/{conversation_id}`
+- `POST /ai/conversations/{conversation_id}/messages`
+- `POST /ai/conversations/{conversation_id}/confirm`
 - `POST /ai/preview-plan`
 - `POST /ai/users/{user_id}/generate-workout`
 - `POST /db/users`
@@ -249,6 +255,7 @@ You can also generate a starter workout plan from the saved athlete profile and 
 
 - The frontend currently covers the MVP flow in one screen: athlete, profile, goals, exercise search, AI generation, saved plan review, plus day-by-day session logging on the dedicated plan page.
 - The new default frontend flow is chat-first: intake conversation, preview, confirmation, then monthly calendar.
+- The chat flow is now persisted in the backend via `conversations` and `conversation_messages`, which gives us a clean base for future auth, user-linked history, and 2FA-gated accounts.
 - Local development is now intended to run on PostgreSQL first, with SQLite kept only as a temporary fallback.
 - The repository now also includes a full Docker path for local orchestration of frontend, backend, and PostgreSQL.
 - Generated plans now include week-by-week periodization metadata so the UI can render a multi-week calendar and week-based Excel export.

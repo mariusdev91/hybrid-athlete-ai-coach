@@ -84,6 +84,26 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+  createConversation(payload) {
+    return request("/ai/conversations", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  getConversation(conversationId) {
+    return request(`/ai/conversations/${conversationId}`);
+  },
+  sendConversationMessage(conversationId, payload) {
+    return request(`/ai/conversations/${conversationId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  confirmConversation(conversationId) {
+    return request(`/ai/conversations/${conversationId}/confirm`, {
+      method: "POST",
+    });
+  },
   listWorkoutPlans(userId) {
     return request(`/db/users/${userId}/workout-plans`);
   },

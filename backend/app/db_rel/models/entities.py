@@ -63,6 +63,10 @@ class User(TimestampMixin, Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    conversations: Mapped[list["Conversation"]] = relationship(
+        back_populates="user",
+        cascade="save-update, merge",
+    )
 
 
 class AthleteProfile(TimestampMixin, Base):
@@ -209,3 +213,52 @@ class WorkoutSession(TimestampMixin, Base):
 
     user: Mapped["User"] = relationship(back_populates="workout_sessions")
     workout_plan: Mapped["WorkoutPlan | None"] = relationship(back_populates="sessions")
+
+
+class Conversation(TimestampMixin, Base):
+    __tablename__ = "conversations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    confirmed_workout_plan_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("workout_plans.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    plan_track: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="collecting", nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), default="UTC", nullable=False)
+    current_step_index: Mapped[int] = mapped_column(Integer, default=-1, nullable=False)
+    intake_data: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    preview_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    user: Mapped["User | None"] = relationship(back_populates="conversations")
+    confirmed_workout_plan: Mapped["WorkoutPlan | None"] = relationship()
+    messages: Mapped[list["ConversationMessage"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by=lambda: ConversationMessage.sequence_index.asc(),
+    )
+
+
+class ConversationMessage(TimestampMixin, Base):
+    __tablename__ = "conversation_messages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    conversation_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    sequence_index: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    conversation: Mapped["Conversation"] = relationship(back_populates="messages")

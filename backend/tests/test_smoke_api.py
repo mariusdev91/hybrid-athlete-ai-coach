@@ -48,6 +48,27 @@ def create_goal(client, user_id):
     return response.json()
 
 
+def create_conversation(client, plan_track="sport"):
+    response = client.post(
+        "/ai/conversations",
+        json={
+            "plan_track": plan_track,
+            "timezone": "Europe/Bucharest",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def send_conversation_message(client, conversation_id, content):
+    response = client.post(
+        f"/ai/conversations/{conversation_id}/messages",
+        json={"content": content},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
 def test_health_and_search_endpoints(client):
     root = client.get("/")
     db_health = client.get("/db/health")
@@ -475,3 +496,100 @@ def test_ai_generate_offseason_football_plan_has_plyometrics_and_variety(client)
         for name in lower_names
         for keyword in ("jump", "hop", "bound", "long jump")
     )
+
+
+def test_ai_conversation_flow_persists_messages_and_preview(client):
+    conversation = create_conversation(client, plan_track="sport")
+    conversation_id = conversation["id"]
+
+    assert conversation["plan_track"] == "sport"
+    assert conversation["status"] == "collecting"
+    assert conversation["current_step_index"] == -1
+    assert len(conversation["messages"]) == 1
+    assert conversation["messages"][0]["role"] == "assistant"
+
+    answers = [
+        "Vreau un plan pentru un fotbalist rapid si exploziv.",
+        "Alex Athlete",
+        "24",
+        "182",
+        "78",
+        "fotbal",
+        "winger",
+        "in season",
+        "1",
+        "intermediate",
+        "4",
+        "55",
+        "body only, dumbbell",
+        "acceleration, change of direction",
+        "Sa fiu mai exploziv",
+        "performance",
+        "nu",
+    ]
+
+    latest = conversation
+    for answer in answers:
+        latest = send_conversation_message(client, conversation_id, answer)
+
+    assert latest["status"] == "preview_ready"
+    assert latest["is_locked"] is True
+    assert latest["preview"]["preview_goal"]["title"] == "Sa fiu mai exploziv"
+    assert latest["preview"]["context"]["primary_sport"] == "football"
+    assert latest["preview"]["context"]["season_phase"] == "in_season"
+    assert latest["preview"]["preview_plan"]["sessions_per_week"] == 4
+    assert latest["current_prompt"] is None
+    assert len(latest["messages"]) >= 30
+
+    persisted = client.get(f"/ai/conversations/{conversation_id}")
+    assert persisted.status_code == 200
+    payload = persisted.json()
+    assert payload["id"] == conversation_id
+    assert payload["status"] == "preview_ready"
+    assert len(payload["messages"]) == len(latest["messages"])
+    assert payload["preview"]["preview_plan"]["title"] == latest["preview"]["preview_plan"]["title"]
+
+
+def test_ai_conversation_confirm_persists_user_and_plan(client):
+    conversation = create_conversation(client, plan_track="sport")
+    conversation_id = conversation["id"]
+
+    answers = [
+        "Vreau un plan pentru un baschetbalist care isi imbunatateste primul pas.",
+        "Mihai Guard",
+        "22",
+        "188",
+        "84",
+        "basketball",
+        "point guard",
+        "in season",
+        "2",
+        "advanced",
+        "5",
+        "50",
+        "body only, dumbbell",
+        "vertical power, change of direction",
+        "Mai mult first step si prospetime",
+        "performance",
+        "nu",
+    ]
+
+    latest = conversation
+    for answer in answers:
+        latest = send_conversation_message(client, conversation_id, answer)
+
+    assert latest["status"] == "preview_ready"
+
+    confirmation = client.post(f"/ai/conversations/{conversation_id}/confirm")
+    assert confirmation.status_code == 200
+    payload = confirmation.json()
+
+    assert payload["conversation"]["status"] == "confirmed"
+    assert payload["conversation"]["user_id"] == payload["user"]["id"]
+    assert payload["conversation"]["confirmed_workout_plan_id"] == payload["saved_workout_plan"]["id"]
+    assert payload["saved_workout_plan"]["user_id"] == payload["user"]["id"]
+    assert len(payload["saved_workout_plan"]["items"]) == len(payload["generated_plan"]["items"])
+
+    persisted = client.get(f"/ai/conversations/{conversation_id}")
+    assert persisted.status_code == 200
+    assert persisted.json()["status"] == "confirmed"
