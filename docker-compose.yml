@@ -17,5 +17,52 @@ services:
       timeout: 5s
       retries: 5
 
+  backend:
+    build:
+      context: ./backend
+    container_name: hybrid-athlete-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://coach:coach@postgres:5432/hybrid_athlete_ai_coach
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL_NAME: ${OPENAI_MODEL_NAME:-gpt-4o-mini}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/all-MiniLM-L6-v2}
+      CORS_ALLOWED_ORIGINS: http://127.0.0.1:4173,http://localhost:4173,http://127.0.0.1:8000,http://localhost:8000
+      CORS_ALLOWED_ORIGIN_REGEX: ^https?://(localhost|127\.0\.0\.1)(:\d+)?$
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - vector_store_cache:/app/app/db/vector_store
+      - huggingface_cache:/root/.cache/huggingface
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/db/health')",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: same-origin
+    container_name: hybrid-athlete-frontend
+    restart: unless-stopped
+    ports:
+      - "4173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
 volumes:
   postgres_data:
+  vector_store_cache:
+  huggingface_cache:

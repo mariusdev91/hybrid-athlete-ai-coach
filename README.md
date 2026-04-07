@@ -93,6 +93,92 @@ Start the API:
 
 The API bootstraps the vector store at startup. If the FAISS index is missing, it is rebuilt from `backend/app/db/exercises.json` and then cached under `backend/app/db/vector_store/`.
 
+## Docker Setup
+
+The repository now includes a full container setup for:
+
+- `postgres` for the relational database
+- `backend` for the FastAPI API
+- `frontend` for the React app served by Nginx
+
+### Why this helps
+
+Docker gives us reproducible environments.
+Instead of asking "what did I install locally?", we describe the app in files and
+Docker recreates the same runtime every time.
+
+The practical mental model is:
+
+- `Dockerfile` = recipe for an image
+- `image` = packaged runtime snapshot
+- `container` = running instance of an image
+- `volume` = persistent data outside the container lifecycle
+- `docker compose` = orchestration for multiple services that must run together
+
+### What each service does here
+
+- `postgres` stores application data
+- `backend` connects to Postgres, runs Alembic migrations automatically at startup, bootstraps the vector store, and serves the API on port `8000`
+- `frontend` serves the built React app on port `4173` and proxies API calls to the backend internally
+
+### First run
+
+From the repository root:
+
+```powershell
+docker compose up --build
+```
+
+Then open:
+
+- frontend: `http://127.0.0.1:4173`
+- backend docs: `http://127.0.0.1:4173/docs`
+- backend direct: `http://127.0.0.1:8000`
+
+Because the frontend container proxies `/ai`, `/db`, `/exercises`, `/admin`, `/docs`, and `/openapi.json` to the backend container, the browser can use the app from one origin during Docker runs.
+
+### Common commands
+
+Start in background:
+
+```powershell
+docker compose up -d --build
+```
+
+Stop containers:
+
+```powershell
+docker compose down
+```
+
+Stop containers and remove database/vector-cache data:
+
+```powershell
+docker compose down -v
+```
+
+See logs:
+
+```powershell
+docker compose logs -f
+```
+
+Run migrations manually inside the backend container:
+
+```powershell
+docker compose exec backend python -m alembic upgrade head
+```
+
+### Persistent data
+
+We keep data in Docker volumes:
+
+- `postgres_data` stores PostgreSQL data
+- `vector_store_cache` stores the FAISS/vector index
+- `huggingface_cache` stores model downloads
+
+That means you can restart containers without losing the database or re-downloading embeddings every time.
+
 ## Automated Tests
 
 Install dev dependencies and run the smoke tests:
@@ -164,6 +250,7 @@ You can also generate a starter workout plan from the saved athlete profile and 
 - The frontend currently covers the MVP flow in one screen: athlete, profile, goals, exercise search, AI generation, saved plan review, plus day-by-day session logging on the dedicated plan page.
 - The new default frontend flow is chat-first: intake conversation, preview, confirmation, then monthly calendar.
 - Local development is now intended to run on PostgreSQL first, with SQLite kept only as a temporary fallback.
+- The repository now also includes a full Docker path for local orchestration of frontend, backend, and PostgreSQL.
 - Generated plans now include week-by-week periodization metadata so the UI can render a multi-week calendar and week-based Excel export.
 - Generated plans now also include plan start dates and per-session planned dates so the monthly calendar can render the current month accurately.
 - The current periodization engine is Bompa-inspired: it progresses through adaptation, accumulation, intensification, and realization phases across the saved plan.
