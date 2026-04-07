@@ -53,7 +53,22 @@ Create the backend environment file:
 Copy-Item backend\.env.example backend\.env
 ```
 
-The default backend configuration already allows local frontend origins such as
+The project is now prepared for PostgreSQL-first local development.
+
+Recommended option with Docker:
+
+```powershell
+docker compose up -d postgres
+```
+
+If you prefer a native PostgreSQL install, create a local database and user that
+match `backend/.env.example`, or adjust `DATABASE_URL` in `backend/.env`.
+
+If PostgreSQL is not ready yet, you can temporarily switch back to SQLite by
+uncommenting the fallback `DATABASE_URL` in `backend/.env.example` and copying
+that into `backend/.env`.
+
+The backend configuration already allows local frontend origins such as
 `http://127.0.0.1:4173` and `http://127.0.0.1:5173`. Override
 `CORS_ALLOWED_ORIGINS` in `backend/.env` if your frontend runs elsewhere.
 
@@ -62,6 +77,12 @@ Run database migrations:
 ```powershell
 Set-Location backend
 ..\.venv\Scripts\python.exe -m alembic upgrade head
+```
+
+If you started PostgreSQL with Docker and want to confirm the container health:
+
+```powershell
+docker compose ps
 ```
 
 Start the API:
@@ -142,6 +163,7 @@ You can also generate a starter workout plan from the saved athlete profile and 
 
 - The frontend currently covers the MVP flow in one screen: athlete, profile, goals, exercise search, AI generation, saved plan review, plus day-by-day session logging on the dedicated plan page.
 - The new default frontend flow is chat-first: intake conversation, preview, confirmation, then monthly calendar.
+- Local development is now intended to run on PostgreSQL first, with SQLite kept only as a temporary fallback.
 - Generated plans now include week-by-week periodization metadata so the UI can render a multi-week calendar and week-based Excel export.
 - Generated plans now also include plan start dates and per-session planned dates so the monthly calendar can render the current month accurately.
 - The current periodization engine is Bompa-inspired: it progresses through adaptation, accumulation, intensification, and realization phases across the saved plan.

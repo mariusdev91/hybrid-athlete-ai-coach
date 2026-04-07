@@ -1,5 +1,6 @@
 """add periodized workout plan item metadata"""
 
+from alembic import context
 from alembic import op
 import sqlalchemy as sa
 
@@ -11,11 +12,14 @@ depends_on = None
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-    existing_columns = {
-        column["name"] for column in inspector.get_columns("workout_plan_items")
-    }
+    if context.is_offline_mode():
+        existing_columns: set[str] = set()
+    else:
+        bind = op.get_bind()
+        inspector = sa.inspect(bind)
+        existing_columns = {
+            column["name"] for column in inspector.get_columns("workout_plan_items")
+        }
 
     if "week_index" not in existing_columns:
         op.add_column(
