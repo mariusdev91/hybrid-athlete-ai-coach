@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { buildPlanSessions, slugify } from "../lib/plan-utils.js";
 import { api } from "../services/api.js";
@@ -18,53 +18,44 @@ const QUESTION_FLOW = [
   { key: "limitations_notes", prompt: "Ai limitari, accidentari sau miscari pe care vrei sa le evitam? Daca nu, scrie nu.", type: "optional" },
 ];
 
-const DEFAULT_INTAKE = {
-  request_text: "",
-  full_name: "",
-  age_years: null,
-  height_cm: null,
-  weight_kg: null,
-  primary_sport: "",
-  experience_level: "",
-  training_days_per_week: 4,
-  session_duration_minutes: 60,
-  equipment_access: [],
-  goal_title: "",
-  goal_type: "performance",
-  limitations_notes: "",
-  duration_weeks: 4,
-  start_date: getTodayIso(),
-  timezone: getLocalTimezone(),
-};
+const CHAT_SESSION_STORAGE_KEY = "hybrid-athlete-chat-session-v1";
+const DEFAULT_STATUS_MESSAGE = "Coach-ul este gata pentru intake.";
 
 function ChatLandingPage() {
   const navigate = useNavigate();
-  const [messages, setMessages] = useState([
-    {
-      id: "welcome",
-      role: "assistant",
-      content:
-        "Spune-mi pe scurt ce vrei sa obtii, iar eu iti construiesc intake-ul pas cu pas si iti pregatesc un preview de plan.",
-    },
-  ]);
-  const [draft, setDraft] = useState("");
-  const [stepIndex, setStepIndex] = useState(-1);
-  const [intake, setIntake] = useState(DEFAULT_INTAKE);
-  const [preview, setPreview] = useState(null);
-  const [statusMessage, setStatusMessage] = useState("Coach-ul este gata pentru intake.");
-  const [errorMessage, setErrorMessage] = useState("");
+  const initialState = useMemo(() => loadStoredChatState(), []);
+  const [messages, setMessages] = useState(initialState.messages);
+  const [draft, setDraft] = useState(initialState.draft);
+  const [stepIndex, setStepIndex] = useState(initialState.stepIndex);
+  const [intake, setIntake] = useState(initialState.intake);
+  const [preview, setPreview] = useState(initialState.preview);
+  const [statusMessage, setStatusMessage] = useState(initialState.statusMessage);
+  const [errorMessage, setErrorMessage] = useState(initialState.errorMessage);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const isConversationLocked = stepIndex >= QUESTION_FLOW.length;
 
   const previewSessions = useMemo(
     () => buildPlanSessions(preview?.preview_plan).slice(0, 4),
     [preview],
   );
 
+  useEffect(() => {
+    persistChatState({
+      messages,
+      draft,
+      stepIndex,
+      intake,
+      preview,
+      statusMessage,
+      errorMessage,
+    });
+  }, [draft, errorMessage, intake, messages, preview, statusMessage, stepIndex]);
+
   async function handleSubmit(event) {
     event.preventDefault();
     const answer = draft.trim();
-    if (!answer || isPreviewing || isConfirming) {
+    if (!answer || isPreviewing || isConfirming || isConversationLocked) {
       return;
     }
 
@@ -206,17 +197,12 @@ function ChatLandingPage() {
   }
 
   function handleResetConversation() {
-    setMessages([
-      {
-        id: "welcome",
-        role: "assistant",
-        content:
-          "Spune-mi pe scurt ce vrei sa obtii, iar eu iti construiesc intake-ul pas cu pas si iti pregatesc un preview de plan.",
-      },
-    ]);
+    const resetState = createDefaultChatState();
+    clearStoredChatState();
+    setMessages(resetState.messages);
     setDraft("");
-    setStepIndex(-1);
-    setIntake(DEFAULT_INTAKE);
+    setStepIndex(resetState.stepIndex);
+    setIntake(resetState.intake);
     setPreview(null);
     setStatusMessage("Coach-ul este gata pentru un nou intake.");
     setErrorMessage("");
@@ -280,25 +266,41 @@ function ChatLandingPage() {
             ))}
           </div>
 
-          <form className="chat-input-row" onSubmit={handleSubmit}>
-            <label className="field chat-input-field">
-              <span>{currentPrompt}</span>
-              <textarea
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder="Scrie raspunsul tau aici..."
-                rows="3"
-                value={draft}
-              />
-            </label>
-            <div className="button-row">
-              <button className="action-button" disabled={isPreviewing || isConfirming || !draft.trim()} type="submit">
-                {isPreviewing ? "Construiesc..." : "Trimite"}
-              </button>
-              <button className="secondary-button" onClick={handleResetConversation} type="button">
-                Reset
-              </button>
+          {isConversationLocked ? (
+            <div className="placeholder">
+              Conversatia este inchisa pentru aceasta sesiune. Poti confirma preview-ul
+              sau poti folosi Reset ca sa pornesti un intake nou.
+              <div className="button-row">
+                <button className="secondary-button" onClick={handleResetConversation} type="button">
+                  Reset
+                </button>
+              </div>
             </div>
-          </form>
+          ) : (
+            <form className="chat-input-row" onSubmit={handleSubmit}>
+              <label className="field chat-input-field">
+                <span>{currentPrompt}</span>
+                <textarea
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder="Scrie raspunsul tau aici..."
+                  rows="3"
+                  value={draft}
+                />
+              </label>
+              <div className="button-row">
+                <button
+                  className="action-button"
+                  disabled={isPreviewing || isConfirming || !draft.trim()}
+                  type="submit"
+                >
+                  {isPreviewing ? "Construiesc..." : "Trimite"}
+                </button>
+                <button className="secondary-button" onClick={handleResetConversation} type="button">
+                  Reset
+                </button>
+              </div>
+            </form>
+          )}
         </section>
 
         <aside className="panel preview-panel">
@@ -412,6 +414,100 @@ function normalizeGoalType(value) {
     return "performance";
   }
   return normalized;
+}
+
+function loadStoredChatState() {
+  const defaultState = createDefaultChatState();
+  if (typeof window === "undefined") {
+    return defaultState;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(CHAT_SESSION_STORAGE_KEY);
+    if (!raw) {
+      return defaultState;
+    }
+
+    const stored = JSON.parse(raw);
+    return {
+      messages:
+        Array.isArray(stored.messages) && stored.messages.length > 0
+          ? stored.messages
+          : defaultState.messages,
+      draft: typeof stored.draft === "string" ? stored.draft : "",
+      stepIndex: Number.isInteger(stored.stepIndex) ? stored.stepIndex : defaultState.stepIndex,
+      intake:
+        stored.intake && typeof stored.intake === "object"
+          ? { ...defaultState.intake, ...stored.intake }
+          : defaultState.intake,
+      preview: stored.preview || null,
+      statusMessage:
+        typeof stored.statusMessage === "string" && stored.statusMessage.trim()
+          ? stored.statusMessage
+          : defaultState.statusMessage,
+      errorMessage: typeof stored.errorMessage === "string" ? stored.errorMessage : "",
+    };
+  } catch {
+    return defaultState;
+  }
+}
+
+function persistChatState(state) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.setItem(CHAT_SESSION_STORAGE_KEY, JSON.stringify(state));
+}
+
+function clearStoredChatState() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+}
+
+function createDefaultChatState() {
+  return {
+    messages: [createWelcomeMessage()],
+    draft: "",
+    stepIndex: -1,
+    intake: buildDefaultIntake(),
+    preview: null,
+    statusMessage: DEFAULT_STATUS_MESSAGE,
+    errorMessage: "",
+  };
+}
+
+function buildDefaultIntake() {
+  return {
+    request_text: "",
+    full_name: "",
+    age_years: null,
+    height_cm: null,
+    weight_kg: null,
+    primary_sport: "",
+    experience_level: "",
+    training_days_per_week: 4,
+    session_duration_minutes: 60,
+    equipment_access: [],
+    goal_title: "",
+    goal_type: "performance",
+    limitations_notes: "",
+    duration_weeks: 4,
+    start_date: getTodayIso(),
+    timezone: getLocalTimezone(),
+  };
+}
+
+function createWelcomeMessage() {
+  return {
+    id: "welcome",
+    role: "assistant",
+    content:
+      "Spune-mi pe scurt ce vrei sa obtii, iar eu iti construiesc intake-ul pas cu pas si iti pregatesc un preview de plan.",
+  };
 }
 
 function getTodayIso() {

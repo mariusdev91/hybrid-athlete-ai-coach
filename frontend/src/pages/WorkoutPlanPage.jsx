@@ -155,7 +155,7 @@ function WorkoutPlanPage() {
 
         <div className="plan-header-actions">
           <Link className="secondary-link" to="/">
-            Back To Chat
+            Back To Dashboard
           </Link>
           <button
             className="action-button"
