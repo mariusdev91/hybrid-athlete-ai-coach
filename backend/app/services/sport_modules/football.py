@@ -3,12 +3,15 @@ from __future__ import annotations
 from math import ceil
 from typing import Any
 
+from app.services.intake_normalization import normalize_goal_type
+from app.services.intake_normalization import sanitize_goal_title
 from app.utils.normalizer import normalize_text
 
 
 FOOTBALL_KEYWORDS = (
     "football",
     "soccer",
+    "fotbal",
     "striker",
     "winger",
     "midfielder",
@@ -634,7 +637,13 @@ def build_constraints(
 
 def build_title(season_phase: str, focus: str, goal) -> str:
     phase_label = season_phase.replace("_", " ").title()
-    return f"Football {phase_label} - {(goal.title if goal else focus).title()}"
+    goal_label = sanitize_goal_title(
+        goal.title if goal else focus,
+        fallback_text=focus,
+        primary_sport="football",
+        goal_type=goal.goal_type if goal else None,
+    )
+    return f"Football {phase_label} - {goal_label}"
 
 
 def build_description(
@@ -645,10 +654,16 @@ def build_description(
     constraints: list[str],
     duration_weeks: int,
 ) -> str:
-    goal_title = goal.title if goal else focus
+    goal_type = normalize_goal_type(goal.goal_type if goal else None)
+    goal_title = sanitize_goal_title(
+        goal.title if goal else focus,
+        fallback_text=focus,
+        primary_sport="football",
+        goal_type=goal_type,
+    )
     return (
         f"Sport-specific football plan for the {season_phase.replace('_', ' ')} phase. "
-        f"Primary direction: {goal_title}. Priority qualities: {', '.join(priorities[:3])}. "
+        f"Primary direction: {goal_title}. Goal type: {goal_type}. Priority qualities: {', '.join(priorities[:3])}. "
         f"The cycle uses Bompa-style sequencing across {duration_weeks} weeks and adapts weekly stress "
         f"to football needs like acceleration, repeat sprint ability, change of direction, and hamstring or adductor resilience. "
         f"{' '.join(constraints[:2])}"

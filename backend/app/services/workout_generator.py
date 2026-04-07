@@ -21,6 +21,10 @@ from app.schemas.ai import GeneratedWorkoutPlan
 from app.schemas.ai import GeneratedWorkoutPlanItem
 from app.schemas.ai import WorkoutGenerationContext
 from app.schemas.ai import WorkoutGenerationRequest
+from app.services.intake_normalization import normalize_goal_type
+from app.services.intake_normalization import normalize_primary_sport
+from app.services.intake_normalization import normalize_season_phase
+from app.services.intake_normalization import sanitize_goal_title
 from app.services.exercise_taxonomy import infer_exercise_tags
 from app.services.exercise_taxonomy import infer_primary_family
 from app.services.exercise_lookup import exercise_lookup
@@ -338,9 +342,11 @@ class WorkoutGeneratorService:
             gender=profile.gender if profile else None,
             height_cm=profile.height_cm if profile else None,
             weight_kg=profile.weight_kg if profile else None,
-            primary_sport=profile.primary_sport if profile else None,
+            primary_sport=normalize_primary_sport(profile.primary_sport if profile else None),
             sport_position=request.sport_position or (profile.sport_position if profile else None),
-            season_phase=request.season_phase or (profile.season_phase if profile else None),
+            season_phase=normalize_season_phase(
+                request.season_phase or (profile.season_phase if profile else None)
+            ),
             weekly_competitions=(
                 request.weekly_competitions
                 if request.weekly_competitions is not None
@@ -566,9 +572,12 @@ class WorkoutGeneratorService:
         return "strength"
 
     def _build_title(self, focus: str, goal: Goal | None) -> str:
-        if goal:
-            return f"{goal.title} - Periodized Plan"
-        return f"{focus.title()} - Periodized Plan"
+        goal_label = sanitize_goal_title(
+            goal.title if goal else focus,
+            fallback_text=focus,
+            goal_type=goal.goal_type if goal else None,
+        )
+        return f"{goal_label} - Periodized Plan"
 
     def _build_description(
         self,
@@ -577,11 +586,17 @@ class WorkoutGeneratorService:
         context: WorkoutGenerationContext,
         duration_weeks: int,
     ) -> str:
-        sport = context.primary_sport or "hybrid athlete"
-        goal_type = goal.goal_type if goal else "general development"
+        sport = normalize_primary_sport(context.primary_sport) or "hybrid athlete"
+        goal_type = normalize_goal_type(goal.goal_type if goal else None)
+        goal_label = sanitize_goal_title(
+            goal.title if goal else focus,
+            fallback_text=focus,
+            primary_sport=sport,
+            goal_type=goal_type,
+        )
         return (
             f"Bompa-inspired periodized starter plan for {sport}. "
-            f"Focus: {focus}. Goal type: {goal_type}. "
+            f"Primary direction: {goal_label}. Goal type: {goal_type}. "
             f"The cycle uses a Bompa-inspired progression across adaptation, accumulation, "
             f"intensification, and realization phases whenever the calendar length allows over {duration_weeks} weeks."
         )

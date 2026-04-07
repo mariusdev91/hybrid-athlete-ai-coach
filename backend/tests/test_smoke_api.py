@@ -295,6 +295,40 @@ def test_ai_preview_plan_without_persisting_user_records(client):
     assert payload["preview_plan"]["items"][0]["planned_date"] == "2026-04-07"
 
 
+def test_ai_preview_plan_normalizes_romanian_inputs_and_vague_goal_titles(client):
+    preview = client.post(
+        "/ai/preview-plan",
+        json={
+            "request_text": "Vreau un plan de fotbal pentru revenire si performanta.",
+            "full_name": "Preview Athlete",
+            "age_years": 24,
+            "height_cm": 182,
+            "weight_kg": 78,
+            "primary_sport": "fotbal",
+            "sport_position": "winger",
+            "season_phase": "in season",
+            "weekly_competitions": 1,
+            "experience_level": "intermediate",
+            "training_days_per_week": 4,
+            "session_duration_minutes": 55,
+            "equipment_access": ["body only", "dumbbell"],
+            "performance_priorities": ["acceleration", "change of direction"],
+            "goal_title": "cel de mai sus",
+            "goal_type": "recovery and performance",
+            "duration_weeks": 4,
+            "start_date": "2026-04-07",
+        },
+    )
+
+    assert preview.status_code == 200
+    payload = preview.json()
+    assert payload["context"]["primary_sport"] == "football"
+    assert payload["context"]["season_phase"] == "in_season"
+    assert payload["preview_goal"]["goal_type"] == "performance"
+    assert payload["preview_goal"]["title"] == "Football performance development"
+    assert payload["preview_plan"]["title"] == "Football In Season - Football performance development"
+
+
 def test_ai_generate_basketball_plan_uses_sport_specific_strategy(client):
     user = create_user(client, email="basketball-flow@example.com")
     user_id = user["id"]

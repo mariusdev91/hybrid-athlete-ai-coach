@@ -56,6 +56,19 @@ const PLAN_TRACK_OPTIONS = [
 
 const CHAT_SESSION_STORAGE_KEY = "hybrid-athlete-chat-session-v2";
 const DEFAULT_STATUS_MESSAGE = "Alege directia in care vrei sa construim planul.";
+const LOW_SIGNAL_ANSWERS = new Set([
+  "cel de mai sus",
+  "cea de mai sus",
+  "cele de mai sus",
+  "de mai sus",
+  "mai sus",
+  "acelasi",
+  "aceeasi",
+  "idem",
+  "same as above",
+  "as above",
+  "above",
+]);
 
 function ChatLandingPage() {
   const navigate = useNavigate();
@@ -416,15 +429,15 @@ function ChatLandingPage() {
             {preview ? (
               <div className="stack">
                 <article className="hero-plan">
-                  <p className="eyebrow">Preview Ready</p>
-                  <h2>{preview.preview_plan.title}</h2>
-                  <p>{preview.preview_plan.description}</p>
+                  <p className="eyebrow">Preview Gata</p>
+                  <h2>{buildPreviewHeadline(preview)}</h2>
+                  <p>{buildPreviewSummary(preview)}</p>
                   <div className="plan-meta">
                     <span className="session-pill status-completed">
-                      {preview.preview_goal.goal_type}
+                      {formatGoalTypeLabel(preview.preview_goal.goal_type)}
                     </span>
                     <span className="session-pill status-pending">
-                      starts {preview.preview_plan.start_date}
+                      incepe la {preview.preview_plan.start_date}
                     </span>
                   </div>
                 </article>
@@ -473,6 +486,8 @@ function ChatLandingPage() {
 }
 
 function parseAnswer(question, value) {
+  const trimmedValue = value.trim();
+
   if (question.type === "number") {
     const parsed = Number(value.replace(",", "."));
     const minimum = question.key === "weekly_competitions" ? 0 : 1;
@@ -497,26 +512,121 @@ function parseAnswer(question, value) {
   }
 
   if (question.type === "optional") {
-    const normalized = value.trim().toLowerCase();
+    const normalized = trimmedValue.toLowerCase();
     if (!normalized || ["nu", "none", "nimic", "n/a"].includes(normalized)) {
       return { ok: true, value: "" };
     }
-    return { ok: true, value: value.trim() };
+    return { ok: true, value: trimmedValue };
   }
 
-  if (!value.trim()) {
+  if (!trimmedValue) {
     return { ok: false, error: `Am nevoie de un raspuns mai clar. ${question.prompt}` };
   }
 
-  return { ok: true, value: value.trim() };
+  if (question.key === "goal_title" && isLowSignalAnswer(trimmedValue)) {
+    return {
+      ok: false,
+      error: "Am nevoie de un obiectiv scris concret, nu de un raspuns de tip 'cel de mai sus'. Spune clar ce vrei sa obtii in 4-8 saptamani.",
+    };
+  }
+
+  if (question.key === "primary_sport") {
+    const normalizedSport = normalizePrimarySport(trimmedValue);
+    if (!normalizedSport) {
+      return {
+        ok: false,
+        error: "Pentru sport, alege una dintre optiunile recunoscute: basketball sau football.",
+      };
+    }
+    return { ok: true, value: normalizedSport };
+  }
+
+  if (question.key === "training_mode") {
+    const normalizedTrainingMode = normalizeTrainingMode(trimmedValue);
+    if (!normalizedTrainingMode) {
+      return {
+        ok: false,
+        error: "Pentru training mode, alege una dintre optiunile: bodybuilding, crossfit, functional training sau hyrox.",
+      };
+    }
+    return { ok: true, value: normalizedTrainingMode };
+  }
+
+  if (question.key === "season_phase") {
+    const normalizedSeasonPhase = normalizeSeasonPhase(trimmedValue);
+    if (!normalizedSeasonPhase) {
+      return {
+        ok: false,
+        error: "Faza de sezon trebuie sa fie una dintre: off_season, pre_season, in_season sau post_season.",
+      };
+    }
+    return { ok: true, value: normalizedSeasonPhase };
+  }
+
+  if (question.key === "experience_level") {
+    const normalizedExperienceLevel = normalizeExperienceLevel(trimmedValue);
+    if (!normalizedExperienceLevel) {
+      return {
+        ok: false,
+        error: "Nivelul trebuie sa fie beginner, intermediate sau advanced.",
+      };
+    }
+    return { ok: true, value: normalizedExperienceLevel };
+  }
+
+  if (question.key === "goal_type") {
+    const normalizedGoalType = normalizeGoalType(trimmedValue);
+    if (!normalizedGoalType) {
+      return {
+        ok: false,
+        error: "Goal type trebuie sa fie unul singur: performance, strength, endurance, fat loss, mobility sau recovery.",
+      };
+    }
+    return { ok: true, value: normalizedGoalType };
+  }
+
+  return { ok: true, value: trimmedValue };
 }
 
 function normalizeGoalType(value) {
-  const normalized = String(value || "performance").trim().toLowerCase();
+  const normalized = String(value || "").trim().toLowerCase();
   if (!normalized) {
     return "performance";
   }
-  return normalized;
+
+  if (normalized.includes("performance") || normalized.includes("performanta")) {
+    return "performance";
+  }
+  if (normalized.includes("strength") || normalized.includes("forta")) {
+    return "strength";
+  }
+  if (
+    normalized.includes("endurance") ||
+    normalized.includes("conditioning") ||
+    normalized.includes("rezistenta") ||
+    normalized.includes("cardio")
+  ) {
+    return "endurance";
+  }
+  if (
+    normalized.includes("fat loss") ||
+    normalized.includes("weight loss") ||
+    normalized.includes("slabire")
+  ) {
+    return "fat loss";
+  }
+  if (normalized.includes("mobility") || normalized.includes("mobilitate")) {
+    return "mobility";
+  }
+  if (
+    normalized.includes("recovery") ||
+    normalized.includes("recuperare") ||
+    normalized.includes("restore")
+  ) {
+    return "recovery";
+  }
+
+  return null;
 }
 
 function getQuestionFlow(planTrack) {
@@ -607,7 +717,7 @@ function buildGenerationPayload(planTrack, intake) {
 
 function resolvePrimarySport(planTrack, intake) {
   if (planTrack === "sport") {
-    return String(intake.primary_sport || "basketball").trim().toLowerCase();
+    return normalizePrimarySport(intake.primary_sport) || "basketball";
   }
 
   const trainingMode = String(intake.training_mode || "").trim();
@@ -619,7 +729,27 @@ function normalizeSeasonPhase(value) {
     return null;
   }
 
-  return String(value).trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const normalized = String(value).trim().toLowerCase();
+  const aliases = {
+    offseason: "off_season",
+    "off season": "off_season",
+    off_season: "off_season",
+    extrasezon: "off_season",
+    preseason: "pre_season",
+    "pre season": "pre_season",
+    pre_season: "pre_season",
+    presezon: "pre_season",
+    inseason: "in_season",
+    "in season": "in_season",
+    in_season: "in_season",
+    sezon: "in_season",
+    postseason: "post_season",
+    "post season": "post_season",
+    post_season: "post_season",
+    postsezon: "post_season",
+  };
+
+  return aliases[normalized] || null;
 }
 
 function loadStoredChatState() {
@@ -736,6 +866,111 @@ function createWelcomeMessage(planTrack) {
     content:
       "Ai intrat pe modulul Training Mode. Spune-mi ce tip de pregatire vrei sa construim, iar eu iti pregatesc intake-ul si preview-ul de plan.",
   };
+}
+
+function isLowSignalAnswer(value) {
+  return LOW_SIGNAL_ANSWERS.has(String(value || "").trim().toLowerCase());
+}
+
+function normalizePrimarySport(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  const aliases = {
+    basketball: "basketball",
+    baschet: "basketball",
+    football: "football",
+    soccer: "football",
+    fotbal: "football",
+  };
+
+  return aliases[normalized] || null;
+}
+
+function normalizeTrainingMode(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  const aliases = {
+    bodybuilding: "bodybuilding",
+    crossfit: "crossfit",
+    "cross-fit": "crossfit",
+    "functional training": "functional training",
+    functional: "functional training",
+    hyrox: "HYROX",
+  };
+
+  return aliases[normalized] || null;
+}
+
+function normalizeExperienceLevel(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  const aliases = {
+    beginner: "beginner",
+    incepator: "beginner",
+    intermediate: "intermediate",
+    mediu: "intermediate",
+    advanced: "advanced",
+    avansat: "advanced",
+  };
+
+  return aliases[normalized] || null;
+}
+
+function buildPreviewHeadline(preview) {
+  return preview?.preview_plan?.title || "Preview de plan";
+}
+
+function buildPreviewSummary(preview) {
+  if (!preview) {
+    return "";
+  }
+
+  const sport = formatSportLabel(preview.context?.primary_sport);
+  const goalTitle = preview.preview_goal?.title || "obiectivul tau principal";
+  const seasonPhase = formatSeasonPhaseLabel(preview.context?.season_phase);
+  const weeks = preview.preview_plan?.duration_weeks || 0;
+  const sessions = preview.preview_plan?.sessions_per_week || 0;
+
+  const details = [
+    `${weeks} saptamani`,
+    `${sessions} sesiuni pe saptamana`,
+  ];
+
+  if (seasonPhase) {
+    details.push(`faza: ${seasonPhase}`);
+  }
+
+  return `Am pregatit un preview pentru ${sport}, construit in jurul obiectivului "${goalTitle}", cu ${details.join(", ")}.`;
+}
+
+function formatGoalTypeLabel(value) {
+  const labels = {
+    performance: "Performance",
+    strength: "Strength",
+    endurance: "Endurance",
+    "fat loss": "Fat Loss",
+    mobility: "Mobility",
+    recovery: "Recovery",
+  };
+
+  return labels[value] || "Performance";
+}
+
+function formatSportLabel(value) {
+  const labels = {
+    basketball: "basketball",
+    football: "football",
+  };
+
+  return labels[value] || "programul tau";
+}
+
+function formatSeasonPhaseLabel(value) {
+  const labels = {
+    off_season: "off-season",
+    pre_season: "pre-season",
+    in_season: "in-season",
+    post_season: "post-season",
+  };
+
+  return labels[value] || "";
 }
 
 function getTodayIso() {
