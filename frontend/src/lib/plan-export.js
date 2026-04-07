@@ -10,6 +10,7 @@ export function downloadPlanWorkbook(plan) {
 
     for (const session of week.days) {
       rows.push({
+        Date: session.plannedDate || "",
         Session: `${session.sessionLabel} (Day ${session.dayIndex})`,
         Phase: session.phaseName,
         Focus: session.sessionFocus,
@@ -23,6 +24,7 @@ export function downloadPlanWorkbook(plan) {
 
       for (const item of session.items) {
         rows.push({
+          Date: item.planned_date || session.plannedDate || "",
           Session: "",
           Phase: "",
           Focus: "",
@@ -36,6 +38,7 @@ export function downloadPlanWorkbook(plan) {
       }
 
       rows.push({
+        Date: "",
         Session: "",
         Phase: "",
         Focus: "",

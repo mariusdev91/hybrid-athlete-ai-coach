@@ -2,6 +2,7 @@ import { lazy, Suspense, startTransition, useEffect, useRef, useState } from "re
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { api } from "./services/api.js";
 
+const ChatLandingPage = lazy(() => import("./pages/ChatLandingPage.jsx"));
 const WorkoutPlanPage = lazy(() => import("./pages/WorkoutPlanPage.jsx"));
 
 const userDefaults = {
@@ -36,7 +37,8 @@ function App() {
   return (
     <Suspense fallback={<div className="app-shell"><div className="placeholder">Loading page...</div></div>}>
       <Routes>
-        <Route element={<DashboardPage />} path="/" />
+        <Route element={<ChatLandingPage />} path="/" />
+        <Route element={<DashboardPage />} path="/workspace" />
         <Route element={<WorkoutPlanPage />} path="/plans/:planId" />
         <Route element={<Navigate replace to="/" />} path="*" />
       </Routes>

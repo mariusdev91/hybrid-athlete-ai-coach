@@ -16,6 +16,9 @@ def create_profile(client, user_id):
         "/db/profiles",
         json={
             "user_id": user_id,
+            "age_years": 31,
+            "height_cm": 178,
+            "weight_kg": 77.5,
             "primary_sport": "hybrid training",
             "experience_level": "intermediate",
             "training_days_per_week": 4,
@@ -108,6 +111,7 @@ def test_domain_flow_create_and_read(client):
                     "session_label": "Lower Body Strength",
                     "session_focus": "strength foundation",
                     "phase_name": "Accumulation",
+                    "planned_date": "2026-04-07",
                     "exercise_name": "Split Squat with Dumbbells",
                     "prescribed_sets": 4,
                     "prescribed_reps": "8",
@@ -226,6 +230,7 @@ def test_ai_generate_workout_and_save_plan(client):
             "goal_id": goal["id"],
             "duration_weeks": 4,
             "sessions_per_week": 3,
+            "start_date": "2026-04-07",
             "save_plan": True,
         },
     )
@@ -237,8 +242,10 @@ def test_ai_generate_workout_and_save_plan(client):
     assert payload["goal"]["id"] == goal["id"]
     assert len(payload["search_queries"]) > 0
     assert payload["generated_plan"]["sessions_per_week"] == 3
+    assert payload["generated_plan"]["start_date"] == "2026-04-07"
     assert len(payload["generated_plan"]["items"]) >= 36
     assert {item["week_index"] for item in payload["generated_plan"]["items"]} == {1, 2, 3, 4}
+    assert payload["generated_plan"]["items"][0]["planned_date"] == "2026-04-07"
     assert any(item["phase_name"] == "Anatomical Adaptation" for item in payload["generated_plan"]["items"])
     assert any(item["phase_name"] == "Accumulation" for item in payload["generated_plan"]["items"])
     assert any(item["phase_name"] == "Intensification" for item in payload["generated_plan"]["items"])
@@ -253,3 +260,33 @@ def test_ai_generate_workout_and_save_plan(client):
     assert persisted.status_code == 200
     assert persisted.json()["id"] == saved_plan["id"]
     assert len(persisted.json()["items"]) == len(saved_plan["items"])
+
+
+def test_ai_preview_plan_without_persisting_user_records(client):
+    preview = client.post(
+        "/ai/preview-plan",
+        json={
+            "request_text": "I want a performance plan for hybrid training.",
+            "full_name": "Preview Athlete",
+            "age_years": 29,
+            "height_cm": 181,
+            "weight_kg": 79,
+            "primary_sport": "hybrid training",
+            "experience_level": "intermediate",
+            "training_days_per_week": 4,
+            "session_duration_minutes": 55,
+            "equipment_access": ["body only", "dumbbell"],
+            "goal_title": "Improve performance and conditioning",
+            "goal_type": "performance",
+            "duration_weeks": 4,
+            "start_date": "2026-04-07",
+        },
+    )
+
+    assert preview.status_code == 200
+    payload = preview.json()
+    assert payload["generator"] == "bompa-inspired-rag-v2"
+    assert payload["preview_goal"]["title"] == "Improve performance and conditioning"
+    assert payload["preview_plan"]["start_date"] == "2026-04-07"
+    assert len(payload["preview_plan"]["items"]) >= 16
+    assert payload["preview_plan"]["items"][0]["planned_date"] == "2026-04-07"

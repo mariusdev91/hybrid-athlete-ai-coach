@@ -10,6 +10,9 @@ from app.db_rel.models import User
 from app.db_rel.session import get_db
 from app.schemas.ai import WorkoutGenerationRequest
 from app.schemas.ai import WorkoutGenerationResponse
+from app.schemas.ai import WorkoutPlanPreviewGoal
+from app.schemas.ai import WorkoutPlanPreviewRequest
+from app.schemas.ai import WorkoutPlanPreviewResponse
 from app.schemas.database import GoalRead
 from app.schemas.database import WorkoutPlanDetailRead
 from app.services.workout_generator import workout_generator
@@ -90,4 +93,57 @@ def generate_workout_for_user(
         context=context,
         generated_plan=generated_plan,
         saved_workout_plan=saved_plan,
+    )
+
+
+@router.post("/preview-plan", response_model=WorkoutPlanPreviewResponse)
+def preview_plan(payload: WorkoutPlanPreviewRequest):
+    preview_profile = AthleteProfile(
+        user_id="preview-user",
+        age_years=payload.age_years,
+        gender=payload.gender,
+        height_cm=payload.height_cm,
+        weight_kg=payload.weight_kg,
+        primary_sport=payload.primary_sport,
+        experience_level=payload.experience_level,
+        training_days_per_week=payload.training_days_per_week,
+        session_duration_minutes=payload.session_duration_minutes,
+        equipment_access=payload.equipment_access,
+        limitations_notes=payload.limitations_notes,
+    )
+    preview_goal = Goal(
+        user_id="preview-user",
+        title=payload.goal_title,
+        goal_type=payload.goal_type,
+        priority=1,
+        status="active",
+    )
+    generation_request = WorkoutGenerationRequest(
+        goal_id=None,
+        focus=None,
+        title=None,
+        description=None,
+        start_date=payload.start_date,
+        sessions_per_week=payload.training_days_per_week,
+        duration_weeks=payload.duration_weeks,
+        equipment_access=payload.equipment_access,
+        limitations_notes=payload.limitations_notes,
+        save_plan=False,
+    )
+    generated_plan, context, search_queries = workout_generator.generate_plan(
+        user_id="preview-user",
+        request=generation_request,
+        profile=preview_profile,
+        goal=preview_goal,
+    )
+
+    return WorkoutPlanPreviewResponse(
+        generator=workout_generator.name,
+        search_queries=search_queries,
+        context=context,
+        preview_goal=WorkoutPlanPreviewGoal(
+            title=preview_goal.title,
+            goal_type=preview_goal.goal_type,
+        ),
+        preview_plan=generated_plan,
     )
