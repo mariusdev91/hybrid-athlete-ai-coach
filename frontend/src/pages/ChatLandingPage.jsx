@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { buildPlanSessions, slugify } from "../lib/plan-utils.js";
 import { api } from "../services/api.js";
@@ -23,6 +23,7 @@ const DEFAULT_STATUS_MESSAGE = "Coach-ul este gata pentru intake.";
 
 function ChatLandingPage() {
   const navigate = useNavigate();
+  const transcriptRef = useRef(null);
   const initialState = useMemo(() => loadStoredChatState(), []);
   const [messages, setMessages] = useState(initialState.messages);
   const [draft, setDraft] = useState(initialState.draft);
@@ -51,6 +52,15 @@ function ChatLandingPage() {
       errorMessage,
     });
   }, [draft, errorMessage, intake, messages, preview, statusMessage, stepIndex]);
+
+  useEffect(() => {
+    const transcript = transcriptRef.current;
+    if (!transcript) {
+      return;
+    }
+
+    transcript.scrollTop = transcript.scrollHeight;
+  }, [messages]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -224,6 +234,20 @@ function ChatLandingPage() {
       ? QUESTION_FLOW[stepIndex].prompt
       : "Scrie pe scurt ce plan vrei sa obtii.";
 
+  function handleDraftKeyDown(event) {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (!draft.trim() || isPreviewing || isConfirming || isConversationLocked) {
+      return;
+    }
+
+    event.currentTarget.form?.requestSubmit();
+  }
+
   return (
     <div className="app-shell chat-shell">
       <div className="backdrop backdrop-a" />
@@ -252,7 +276,7 @@ function ChatLandingPage() {
 
       <main className="chat-layout">
         <section className="chat-panel">
-          <div className="chat-transcript">
+          <div className="chat-transcript" ref={transcriptRef}>
             {messages.map((message) => (
               <article
                 className={`chat-bubble ${message.role === "assistant" ? "assistant" : "user"}`}
@@ -282,6 +306,7 @@ function ChatLandingPage() {
                 <span>{currentPrompt}</span>
                 <textarea
                   onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={handleDraftKeyDown}
                   placeholder="Scrie raspunsul tau aici..."
                   rows="3"
                   value={draft}
