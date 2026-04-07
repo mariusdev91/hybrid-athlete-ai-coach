@@ -346,3 +346,60 @@ def test_ai_generate_basketball_plan_uses_sport_specific_strategy(client):
     } == {"In-Season Maintenance", "Neural Freshness", "Game Support Deload"}
     assert any(item["session_label"] == "Neural Primer" for item in payload["generated_plan"]["items"])
     assert any("Priority qualities:" in (item["notes"] or "") for item in payload["generated_plan"]["items"])
+
+
+def test_ai_generate_football_plan_uses_sport_specific_strategy(client):
+    user = create_user(client, email="football-flow@example.com")
+    user_id = user["id"]
+    create_profile(
+        client,
+        user_id,
+        primary_sport="football",
+        sport_position="winger",
+        season_phase="in_season",
+        weekly_competitions=2,
+        performance_priorities=["acceleration", "hamstring resilience", "repeat sprint"],
+        training_days_per_week=4,
+        session_duration_minutes=45,
+    )
+
+    goal = client.post(
+        "/db/goals",
+        json={
+            "user_id": user_id,
+            "title": "Improve acceleration and repeat sprint output without losing freshness",
+            "goal_type": "performance",
+            "priority": 1,
+        },
+    )
+    assert goal.status_code == 201
+
+    generated = client.post(
+        f"/ai/users/{user_id}/generate-workout",
+        json={
+            "goal_id": goal.json()["id"],
+            "duration_weeks": 4,
+            "sessions_per_week": 4,
+            "save_plan": False,
+        },
+    )
+
+    assert generated.status_code == 200
+    payload = generated.json()
+    assert payload["context"]["primary_sport"] == "football"
+    assert payload["context"]["sport_position"] == "winger"
+    assert payload["context"]["season_phase"] == "in_season"
+    assert payload["context"]["weekly_competitions"] == 2
+    assert payload["context"]["performance_priorities"] == [
+        "acceleration",
+        "hamstring resilience",
+        "repeat sprint",
+    ]
+    assert payload["generated_plan"]["sessions_per_week"] == 2
+    assert "Football In Season" in payload["generated_plan"]["title"]
+    assert "sport-specific football plan" in payload["generated_plan"]["description"].lower()
+    assert {
+        item["phase_name"] for item in payload["generated_plan"]["items"]
+    } == {"In-Season Maintenance", "Neural Freshness", "Fixture Deload"}
+    assert any(item["session_label"] == "Neural Speed Primer" for item in payload["generated_plan"]["items"])
+    assert any("hamstring" in (item["notes"] or "").lower() for item in payload["generated_plan"]["items"])

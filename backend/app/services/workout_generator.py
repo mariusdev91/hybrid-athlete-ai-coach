@@ -20,7 +20,9 @@ from app.schemas.ai import WorkoutGenerationContext
 from app.schemas.ai import WorkoutGenerationRequest
 from app.services.exercise_lookup import exercise_lookup
 from app.services.sport_modules import build_basketball_strategy
+from app.services.sport_modules import build_football_strategy
 from app.services.sport_modules import is_basketball_context
+from app.services.sport_modules import is_football_context
 from app.utils.normalizer import normalize_text
 
 
@@ -377,6 +379,22 @@ class WorkoutGeneratorService:
             phase_library = basketball_strategy["phase_library"]
             strategy_constraints = basketball_strategy["constraints"]
             max_slots_per_day = basketball_strategy["max_slots_per_day"]
+        elif is_football_context(context.primary_sport, focus):
+            football_strategy = build_football_strategy(
+                context=context,
+                goal=goal,
+                focus=focus,
+                duration_weeks=request.duration_weeks,
+                requested_sessions_per_week=request.sessions_per_week or context.training_days_per_week,
+            )
+            session_count = football_strategy["session_count"]
+            title = request.title or football_strategy["title"]
+            description = request.description or football_strategy["description"]
+            templates = football_strategy["templates"]
+            phase_schedule = football_strategy["phase_schedule"]
+            phase_library = football_strategy["phase_library"]
+            strategy_constraints = football_strategy["constraints"]
+            max_slots_per_day = football_strategy["max_slots_per_day"]
         else:
             session_count = request.sessions_per_week or context.training_days_per_week or 3
             title = request.title or self._build_title(focus, goal)

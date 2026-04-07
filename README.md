@@ -17,7 +17,7 @@ Right now the product supports an MVP flow across both layers:
 - Excel export split by training week
 - semantic exercise search over a local exercise database
 - Bompa-inspired AI workout generation and saved plan review
-- a first sport-specific basketball planning module with season-phase logic
+- sport-specific basketball and football planning modules with season-phase logic
 
 ## Branch Workflow
 
@@ -99,7 +99,7 @@ The root route `/` now serves a guided chat intake flow that builds a workout pr
 
 After confirmation, the saved workout plan opens on a dedicated monthly calendar page, can be logged day by day, and can be downloaded as an Excel workbook with one sheet per week.
 
-For basketball-focused workflows, the backend can now use optional profile or AI input fields such as `sport_position`, `season_phase`, `weekly_competitions`, and `performance_priorities` to switch from the generic hybrid plan builder to a basketball-specific support module.
+For basketball-focused or football-focused workflows, the backend can now use optional profile or AI input fields such as `sport_position`, `season_phase`, `weekly_competitions`, and `performance_priorities` to switch from the generic hybrid plan builder to a sport-specific support module.
 
 ## Useful Endpoints
 
@@ -145,6 +145,6 @@ You can also generate a starter workout plan from the saved athlete profile and 
 - Generated plans now include week-by-week periodization metadata so the UI can render a multi-week calendar and week-based Excel export.
 - Generated plans now also include plan start dates and per-session planned dates so the monthly calendar can render the current month accurately.
 - The current periodization engine is Bompa-inspired: it progresses through adaptation, accumulation, intensification, and realization phases across the saved plan.
-- Basketball plans now apply sport-specific templates and season-aware constraints for `off_season`, `pre_season`, `in_season`, and `post_season`.
+- Basketball and football plans now apply sport-specific templates and season-aware constraints for `off_season`, `pre_season`, `in_season`, and `post_season`.
 - Exercise data is generated from the submodules declared in `.gitmodules`.
 - The current priority is product hardening: editable data, stronger flows, and QA polish before deeper feature work.
