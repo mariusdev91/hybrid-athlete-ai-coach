@@ -19,6 +19,8 @@ from app.schemas.ai import GeneratedWorkoutPlanItem
 from app.schemas.ai import WorkoutGenerationContext
 from app.schemas.ai import WorkoutGenerationRequest
 from app.services.exercise_lookup import exercise_lookup
+from app.services.sport_modules import build_basketball_strategy
+from app.services.sport_modules import is_basketball_context
 from app.utils.normalizer import normalize_text
 
 
@@ -323,14 +325,23 @@ class WorkoutGeneratorService:
     ) -> WorkoutGenerationContext:
         profile_equipment = list(profile.equipment_access) if profile else []
         equipment_access = request.equipment_access or profile_equipment
+        profile_priorities = list(profile.performance_priorities) if profile else []
         return WorkoutGenerationContext(
             age_years=profile.age_years if profile else None,
             gender=profile.gender if profile else None,
             height_cm=profile.height_cm if profile else None,
             weight_kg=profile.weight_kg if profile else None,
             primary_sport=profile.primary_sport if profile else None,
+            sport_position=request.sport_position or (profile.sport_position if profile else None),
+            season_phase=request.season_phase or (profile.season_phase if profile else None),
+            weekly_competitions=(
+                request.weekly_competitions
+                if request.weekly_competitions is not None
+                else (profile.weekly_competitions if profile else None)
+            ),
             experience_level=profile.experience_level if profile else None,
             equipment_access=equipment_access,
+            performance_priorities=request.performance_priorities or profile_priorities,
             training_days_per_week=profile.training_days_per_week if profile else None,
             session_duration_minutes=profile.session_duration_minutes if profile else None,
             limitations_notes=request.limitations_notes or (profile.limitations_notes if profile else None),
@@ -344,19 +355,39 @@ class WorkoutGeneratorService:
         goal: Goal | None = None,
     ) -> tuple[GeneratedWorkoutPlan, WorkoutGenerationContext, list[str]]:
         context = self.build_context(profile, request)
-        session_count = request.sessions_per_week or context.training_days_per_week or 3
         focus = self._resolve_focus(request, goal, profile)
-        goal_track = self._resolve_goal_track(goal, focus)
-        title = request.title or self._build_title(focus, goal)
-        description = request.description or self._build_description(focus, goal, context, request.duration_weeks)
         start_date = request.start_date or date.today()
+        goal_track = self._resolve_goal_track(goal, focus)
+        strategy_constraints: list[str] = []
+        phase_library = None
 
-        templates = self._resolve_templates(goal, focus, session_count)
-        phase_schedule = self._build_phase_schedule(request.duration_weeks, goal_track)
+        if is_basketball_context(context.primary_sport, focus):
+            basketball_strategy = build_basketball_strategy(
+                context=context,
+                goal=goal,
+                focus=focus,
+                duration_weeks=request.duration_weeks,
+                requested_sessions_per_week=request.sessions_per_week or context.training_days_per_week,
+            )
+            session_count = basketball_strategy["session_count"]
+            title = request.title or basketball_strategy["title"]
+            description = request.description or basketball_strategy["description"]
+            templates = basketball_strategy["templates"]
+            phase_schedule = basketball_strategy["phase_schedule"]
+            phase_library = basketball_strategy["phase_library"]
+            strategy_constraints = basketball_strategy["constraints"]
+            max_slots_per_day = basketball_strategy["max_slots_per_day"]
+        else:
+            session_count = request.sessions_per_week or context.training_days_per_week or 3
+            title = request.title or self._build_title(focus, goal)
+            description = request.description or self._build_description(focus, goal, context, request.duration_weeks)
+            templates = self._resolve_templates(goal, focus, session_count)
+            phase_schedule = self._build_phase_schedule(request.duration_weeks, goal_track)
+            max_slots_per_day = 3 if context.session_duration_minutes and context.session_duration_minutes < 45 else 4
+
         day_offsets = self._resolve_training_day_offsets(session_count)
         search_queries: list[str] = []
         items: list[GeneratedWorkoutPlanItem] = []
-        max_slots_per_day = 3 if context.session_duration_minutes and context.session_duration_minutes < 45 else 4
 
         for week in phase_schedule:
             for day_index, template in enumerate(templates, start=1):
@@ -380,8 +411,20 @@ class WorkoutGeneratorService:
                     if exercise.get("id"):
                         used_ids.add(exercise["id"])
 
-                    prescription = self._build_prescription(slot["role"], week["phase_name"], goal_track)
-                    notes = self._build_item_notes(template, week, context, slot["role"])
+                    prescription = self._build_prescription(
+                        slot["role"],
+                        week["phase_name"],
+                        goal_track=goal_track,
+                        phase_library=phase_library,
+                    )
+                    notes = self._build_item_notes(
+                        template,
+                        week,
+                        context,
+                        slot["role"],
+                        constraints=strategy_constraints,
+                        performance_priorities=context.performance_priorities,
+                    )
 
                     items.append(
                         GeneratedWorkoutPlanItem(
@@ -597,6 +640,8 @@ class WorkoutGeneratorService:
         week: dict[str, Any],
         context: WorkoutGenerationContext,
         role: str,
+        constraints: list[str] | None = None,
+        performance_priorities: list[str] | None = None,
     ) -> str:
         note_parts = [
             f"{week['phase_name']} block",
@@ -604,6 +649,10 @@ class WorkoutGeneratorService:
             f"Load strategy: {week['load_note']}",
             f"Session emphasis: {template['focus']}",
         ]
+        if performance_priorities:
+            note_parts.append(f"Priority qualities: {', '.join(performance_priorities[:3])}")
+        if constraints:
+            note_parts.extend(constraints[:2])
         if role == "mobility" and context.limitations_notes:
             note_parts.append(f"Respect limitations: {context.limitations_notes}")
         return " | ".join(note_parts)
@@ -699,7 +748,15 @@ class WorkoutGeneratorService:
 
         return score
 
-    def _build_prescription(self, role: str, phase_name: str, goal_track: str):
+    def _build_prescription(
+        self,
+        role: str,
+        phase_name: str,
+        goal_track: str,
+        phase_library: dict[str, Any] | None = None,
+    ):
+        if phase_library is not None:
+            return dict(phase_library[phase_name]["roles"][role])
         return dict(PHASE_LIBRARY[goal_track][phase_name]["roles"][role])
 
 

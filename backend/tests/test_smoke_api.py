@@ -11,21 +11,24 @@ def create_user(client, email="smoke@example.com"):
     return response.json()
 
 
-def create_profile(client, user_id):
+def create_profile(client, user_id, **overrides):
+    payload = {
+        "user_id": user_id,
+        "age_years": 31,
+        "height_cm": 178,
+        "weight_kg": 77.5,
+        "primary_sport": "hybrid training",
+        "experience_level": "intermediate",
+        "training_days_per_week": 4,
+        "session_duration_minutes": 50,
+        "equipment_access": ["body only", "dumbbell"],
+        "performance_priorities": [],
+        "limitations_notes": "keep overhead volume moderate",
+    }
+    payload.update(overrides)
     response = client.post(
         "/db/profiles",
-        json={
-            "user_id": user_id,
-            "age_years": 31,
-            "height_cm": 178,
-            "weight_kg": 77.5,
-            "primary_sport": "hybrid training",
-            "experience_level": "intermediate",
-            "training_days_per_week": 4,
-            "session_duration_minutes": 50,
-            "equipment_access": ["body only", "dumbbell"],
-            "limitations_notes": "keep overhead volume moderate",
-        },
+        json=payload,
     )
     assert response.status_code == 201
     return response.json()
@@ -290,3 +293,56 @@ def test_ai_preview_plan_without_persisting_user_records(client):
     assert payload["preview_plan"]["start_date"] == "2026-04-07"
     assert len(payload["preview_plan"]["items"]) >= 16
     assert payload["preview_plan"]["items"][0]["planned_date"] == "2026-04-07"
+
+
+def test_ai_generate_basketball_plan_uses_sport_specific_strategy(client):
+    user = create_user(client, email="basketball-flow@example.com")
+    user_id = user["id"]
+    create_profile(
+        client,
+        user_id,
+        primary_sport="basketball",
+        sport_position="point guard",
+        season_phase="in_season",
+        weekly_competitions=2,
+        performance_priorities=["vertical power", "change of direction"],
+        training_days_per_week=5,
+        session_duration_minutes=45,
+    )
+
+    goal = client.post(
+        "/db/goals",
+        json={
+            "user_id": user_id,
+            "title": "Improve first step, jump freshness, and repeat sprint tolerance",
+            "goal_type": "performance",
+            "priority": 1,
+        },
+    )
+    assert goal.status_code == 201
+
+    generated = client.post(
+        f"/ai/users/{user_id}/generate-workout",
+        json={
+            "goal_id": goal.json()["id"],
+            "duration_weeks": 5,
+            "sessions_per_week": 5,
+            "save_plan": False,
+        },
+    )
+
+    assert generated.status_code == 200
+    payload = generated.json()
+    assert payload["context"]["primary_sport"] == "basketball"
+    assert payload["context"]["sport_position"] == "point guard"
+    assert payload["context"]["season_phase"] == "in_season"
+    assert payload["context"]["weekly_competitions"] == 2
+    assert payload["context"]["performance_priorities"] == ["vertical power", "change of direction"]
+    assert payload["generated_plan"]["sessions_per_week"] == 3
+    assert "Basketball In Season" in payload["generated_plan"]["title"]
+    assert "sport-specific basketball plan" in payload["generated_plan"]["description"].lower()
+    assert {
+        item["phase_name"] for item in payload["generated_plan"]["items"]
+    } == {"In-Season Maintenance", "Neural Freshness", "Game Support Deload"}
+    assert any(item["session_label"] == "Neural Primer" for item in payload["generated_plan"]["items"])
+    assert any("Priority qualities:" in (item["notes"] or "") for item in payload["generated_plan"]["items"])

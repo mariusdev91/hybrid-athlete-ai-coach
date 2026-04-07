@@ -39,10 +39,14 @@ class AthleteProfileCreate(BaseModel):
     height_cm: int | None = Field(default=None, ge=80, le=260)
     weight_kg: float | None = Field(default=None, gt=20, le=400)
     primary_sport: str | None = None
+    sport_position: str | None = None
+    season_phase: str | None = None
+    weekly_competitions: int | None = Field(default=None, ge=0, le=7)
     experience_level: str | None = None
     training_days_per_week: int | None = None
     session_duration_minutes: int | None = None
     equipment_access: list[str] = Field(default_factory=list)
+    performance_priorities: list[str] = Field(default_factory=list)
     limitations_notes: str | None = None
 
 
@@ -53,10 +57,14 @@ class AthleteProfileUpsert(BaseModel):
     height_cm: int | None = Field(default=None, ge=80, le=260)
     weight_kg: float | None = Field(default=None, gt=20, le=400)
     primary_sport: str | None = None
+    sport_position: str | None = None
+    season_phase: str | None = None
+    weekly_competitions: int | None = Field(default=None, ge=0, le=7)
     experience_level: str | None = None
     training_days_per_week: int | None = None
     session_duration_minutes: int | None = None
     equipment_access: list[str] | None = None
+    performance_priorities: list[str] | None = None
     limitations_notes: str | None = None
 
 
@@ -69,10 +77,14 @@ class AthleteProfileRead(ORMBaseModel):
     height_cm: int | None = None
     weight_kg: float | None = None
     primary_sport: str | None = None
+    sport_position: str | None = None
+    season_phase: str | None = None
+    weekly_competitions: int | None = None
     experience_level: str | None = None
     training_days_per_week: int | None = None
     session_duration_minutes: int | None = None
     equipment_access: list[str]
+    performance_priorities: list[str]
     limitations_notes: str | None = None
     created_at: datetime
     updated_at: datetime

@@ -15,6 +15,10 @@ class WorkoutGenerationRequest(BaseModel):
     start_date: date | None = None
     sessions_per_week: int | None = Field(default=None, ge=1, le=7)
     duration_weeks: int = Field(default=1, ge=1, le=16)
+    sport_position: str | None = None
+    season_phase: str | None = None
+    weekly_competitions: int | None = Field(default=None, ge=0, le=7)
+    performance_priorities: list[str] | None = None
     equipment_access: list[str] | None = None
     limitations_notes: str | None = None
     save_plan: bool = True
@@ -58,8 +62,12 @@ class WorkoutGenerationContext(BaseModel):
     height_cm: int | None = None
     weight_kg: float | None = None
     primary_sport: str | None = None
+    sport_position: str | None = None
+    season_phase: str | None = None
+    weekly_competitions: int | None = None
     experience_level: str | None = None
     equipment_access: list[str] = Field(default_factory=list)
+    performance_priorities: list[str] = Field(default_factory=list)
     training_days_per_week: int | None = None
     session_duration_minutes: int | None = None
     limitations_notes: str | None = None
@@ -88,10 +96,14 @@ class WorkoutPlanPreviewRequest(BaseModel):
     height_cm: int | None = Field(default=None, ge=80, le=260)
     weight_kg: float | None = Field(default=None, gt=20, le=400)
     primary_sport: str
+    sport_position: str | None = None
+    season_phase: str | None = None
+    weekly_competitions: int | None = Field(default=None, ge=0, le=7)
     experience_level: str | None = None
     training_days_per_week: int = Field(default=4, ge=1, le=7)
     session_duration_minutes: int = Field(default=60, ge=15, le=240)
     equipment_access: list[str] = Field(default_factory=list)
+    performance_priorities: list[str] = Field(default_factory=list)
     limitations_notes: str | None = None
     goal_title: str
     goal_type: str = "performance"
