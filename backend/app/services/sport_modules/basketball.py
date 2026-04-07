@@ -67,14 +67,14 @@ SEASON_CONFIG = {
 }
 
 
-def slot(role: str, *queries: tuple[str, str | None]):
+def slot(role: str, *queries: tuple[str, str | None], target_tags: list[str] | None = None):
     payload = []
     for query, primary in queries:
         item: dict[str, Any] = {"query": query}
         if primary:
             item["primary_muscles"] = [primary]
         payload.append(item)
-    return {"role": role, "queries": payload}
+    return {"role": role, "queries": payload, "target_tags": list(target_tags or [])}
 
 
 def rx(sets: int, reps: str, rest: int, rpe: int | None):
@@ -115,8 +115,8 @@ BASKETBALL_TEMPLATE_LIBRARY = {
             "focus": "lower-body force, eccentric control, and clean landings",
             "tags": ["force", "vertical_power", "change_of_direction"],
             "slots": [
-                slot("force", ("split squat with dumbbells", "quadriceps"), ("goblet squat", "quadriceps"), ("bodyweight walking lunge", "quadriceps")),
-                slot("force", ("romanian deadlift", "hamstrings"), ("single leg glute bridge", "glutes"), ("dumbbell rear lunge", "quadriceps")),
+                slot("force", ("split squat with dumbbells", "quadriceps"), ("goblet squat", "quadriceps"), ("bodyweight walking lunge", "quadriceps"), target_tags=["force", "lower_strength", "unilateral_lower"]),
+                slot("force", ("romanian deadlift", "hamstrings"), ("single leg glute bridge", "glutes"), ("dumbbell rear lunge", "quadriceps"), target_tags=["force", "posterior_chain", "unilateral_lower"]),
                 slot(
                     "elastic",
                     ("freehand jump squat", None),
@@ -125,9 +125,10 @@ BASKETBALL_TEMPLATE_LIBRARY = {
                     ("depth jump leap", None),
                     ("standing long jump", None),
                     ("hurdle hops", None),
+                    target_tags=["elastic", "plyometric", "vertical_power", "lateral_power"],
                 ),
-                slot("core", ("plank", "abdominals"), ("reverse crunch", "abdominals")),
-                slot("mobility", ("hamstring stretch", None), ("seated floor hamstring stretch", None)),
+                slot("core", ("plank", "abdominals"), ("reverse crunch", "abdominals"), target_tags=["core", "trunk_stability"]),
+                slot("mobility", ("hamstring stretch", None), ("seated floor hamstring stretch", None), target_tags=["mobility"]),
             ],
         },
         {
@@ -135,11 +136,11 @@ BASKETBALL_TEMPLATE_LIBRARY = {
             "focus": "upper-body strength, contact tolerance, and trunk stiffness",
             "tags": ["upper_body", "resilience"],
             "slots": [
-                slot("upper_strength", ("pushups", "chest"), ("push up to side plank", "chest")),
-                slot("upper_strength", ("one-arm dumbbell row", "middle back"), ("bent over two-dumbbell row", "middle back"), ("inverted row", "middle back")),
-                slot("elastic", ("medicine ball chest pass", "chest"), ("medicine ball scoop throw", "shoulders"), ("pushups", "chest")),
-                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals")),
-                slot("mobility", ("seated overhead stretch", None), ("hamstring stretch", None)),
+                slot("upper_strength", ("pushups", "chest"), ("push up to side plank", "chest"), target_tags=["upper_strength", "upper_push"]),
+                slot("upper_strength", ("one-arm dumbbell row", "middle back"), ("bent over two-dumbbell row", "middle back"), ("inverted row", "middle back"), target_tags=["upper_strength", "upper_pull"]),
+                slot("elastic", ("medicine ball chest pass", "chest"), ("medicine ball scoop throw", "shoulders"), ("pushups", "chest"), target_tags=["upper_strength", "medicine_ball_power"]),
+                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals"), target_tags=["core", "trunk_stability"]),
+                slot("mobility", ("seated overhead stretch", None), ("hamstring stretch", None), target_tags=["mobility"]),
             ],
         },
         {
@@ -147,8 +148,8 @@ BASKETBALL_TEMPLATE_LIBRARY = {
             "focus": "first-step force, braking quality, and directional efficiency",
             "tags": ["acceleration", "change_of_direction"],
             "slots": [
-                slot("speed", ("single-cone sprint drill", "quadriceps"), ("side hop-sprint", "quadriceps"), ("wind sprints", "abdominals")),
-                slot("force", ("crossover reverse lunge", "quadriceps"), ("bodyweight walking lunge", "quadriceps"), ("split squats", "quadriceps")),
+                slot("speed", ("single-cone sprint drill", "quadriceps"), ("side hop-sprint", "quadriceps"), ("wind sprints", "abdominals"), target_tags=["speed", "acceleration", "change_of_direction"]),
+                slot("force", ("crossover reverse lunge", "quadriceps"), ("bodyweight walking lunge", "quadriceps"), ("split squats", "quadriceps"), target_tags=["force", "unilateral_lower", "change_of_direction"]),
                 slot(
                     "elastic",
                     ("freehand jump squat", None),
@@ -157,9 +158,10 @@ BASKETBALL_TEMPLATE_LIBRARY = {
                     ("lateral bound", None),
                     ("single-leg lateral hop", None),
                     ("front cone hops", None),
+                    target_tags=["elastic", "lateral_power", "change_of_direction"],
                 ),
-                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals")),
-                slot("mobility", ("hamstring stretch", None), ("hip flexor stretch", None)),
+                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals"), target_tags=["core", "trunk_stability"]),
+                slot("mobility", ("hamstring stretch", None), ("hip flexor stretch", None), target_tags=["mobility"]),
             ],
         },
         {
@@ -174,11 +176,12 @@ BASKETBALL_TEMPLATE_LIBRARY = {
                     ("lateral box jump", None),
                     ("split jump", None),
                     ("knee tuck jump", None),
+                    target_tags=["elastic", "plyometric", "vertical_power"],
                 ),
-                slot("elastic", ("medicine ball scoop throw", "shoulders"), ("medicine ball chest pass", "chest"), ("pushups", "chest")),
-                slot("conditioning", ("wind sprints", "abdominals"), ("bench sprint", "quadriceps"), ("single-cone sprint drill", "quadriceps")),
-                slot("core", ("reverse crunch", "abdominals"), ("plank", "abdominals")),
-                slot("mobility", ("hamstring stretch", None), ("seated floor hamstring stretch", None)),
+                slot("elastic", ("medicine ball scoop throw", "shoulders"), ("medicine ball chest pass", "chest"), ("pushups", "chest"), target_tags=["upper_strength", "medicine_ball_power"]),
+                slot("conditioning", ("wind sprints", "abdominals"), ("bench sprint", "quadriceps"), ("single-cone sprint drill", "quadriceps"), target_tags=["conditioning", "repeat_sprint", "speed"]),
+                slot("core", ("reverse crunch", "abdominals"), ("plank", "abdominals"), target_tags=["core", "trunk_stability"]),
+                slot("mobility", ("hamstring stretch", None), ("seated floor hamstring stretch", None), target_tags=["mobility"]),
             ],
         },
     ],
@@ -188,16 +191,17 @@ BASKETBALL_TEMPLATE_LIBRARY = {
             "focus": "convert force into jump and acceleration outputs",
             "tags": ["vertical_power", "acceleration"],
             "slots": [
-                slot("force", ("split squat with dumbbells", "quadriceps"), ("dumbbell rear lunge", "quadriceps")),
+                slot("force", ("split squat with dumbbells", "quadriceps"), ("dumbbell rear lunge", "quadriceps"), target_tags=["force", "unilateral_lower"]),
                 slot(
                     "elastic",
                     ("freehand jump squat", None),
                     ("front box jump", None),
                     ("depth jump leap", None),
                     ("standing long jump", None),
+                    target_tags=["elastic", "vertical_power", "horizontal_power"],
                 ),
-                slot("speed", ("side hop-sprint", "quadriceps"), ("single-cone sprint drill", "quadriceps"), ("wind sprints", "abdominals")),
-                slot("core", ("plank", "abdominals"), ("reverse crunch", "abdominals")),
+                slot("speed", ("side hop-sprint", "quadriceps"), ("single-cone sprint drill", "quadriceps"), ("wind sprints", "abdominals"), target_tags=["speed", "acceleration"]),
+                slot("core", ("plank", "abdominals"), ("reverse crunch", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
         {
@@ -205,10 +209,10 @@ BASKETBALL_TEMPLATE_LIBRARY = {
             "focus": "retain strength and upper-body robustness before competition",
             "tags": ["upper_body", "resilience"],
             "slots": [
-                slot("upper_strength", ("pushups", "chest"), ("push up to side plank", "chest")),
-                slot("upper_strength", ("one-arm dumbbell row", "middle back"), ("bent over two-dumbbell row", "middle back")),
-                slot("assistance", ("standing dumbbell calf raise", "calves"), ("single leg glute bridge", "glutes")),
-                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals")),
+                slot("upper_strength", ("pushups", "chest"), ("push up to side plank", "chest"), target_tags=["upper_strength", "upper_push"]),
+                slot("upper_strength", ("one-arm dumbbell row", "middle back"), ("bent over two-dumbbell row", "middle back"), target_tags=["upper_strength", "upper_pull"]),
+                slot("assistance", ("standing dumbbell calf raise", "calves"), ("single leg glute bridge", "glutes"), target_tags=["assistance", "calf_stiffness", "posterior_chain"]),
+                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
         {
@@ -216,10 +220,10 @@ BASKETBALL_TEMPLATE_LIBRARY = {
             "focus": "prepare for repeated high-intensity efforts and short recoveries",
             "tags": ["repeat_sprint", "conditioning"],
             "slots": [
-                slot("conditioning", ("wind sprints", "abdominals"), ("bench sprint", "quadriceps"), ("single-cone sprint drill", "quadriceps")),
-                slot("speed", ("side hop-sprint", "quadriceps"), ("wind sprints", "abdominals")),
-                slot("mobility", ("hamstring stretch", None), ("seated floor hamstring stretch", None)),
-                slot("core", ("reverse crunch", "abdominals"), ("plank", "abdominals")),
+                slot("conditioning", ("wind sprints", "abdominals"), ("bench sprint", "quadriceps"), ("single-cone sprint drill", "quadriceps"), target_tags=["conditioning", "repeat_sprint"]),
+                slot("speed", ("side hop-sprint", "quadriceps"), ("wind sprints", "abdominals"), target_tags=["speed", "acceleration"]),
+                slot("mobility", ("hamstring stretch", None), ("seated floor hamstring stretch", None), target_tags=["mobility"]),
+                slot("core", ("reverse crunch", "abdominals"), ("plank", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
         {
@@ -227,9 +231,9 @@ BASKETBALL_TEMPLATE_LIBRARY = {
             "focus": "keep hips, ankles, and trunk fresh while protecting jump quality",
             "tags": ["mobility", "resilience"],
             "slots": [
-                slot("mobility", ("hamstring stretch", None), ("seated overhead stretch", None)),
-                slot("assistance", ("single leg glute bridge", "glutes"), ("standing dumbbell calf raise", "calves")),
-                slot("core", ("plank", "abdominals"), ("reverse crunch", "abdominals")),
+                slot("mobility", ("hamstring stretch", None), ("seated overhead stretch", None), target_tags=["mobility"]),
+                slot("assistance", ("single leg glute bridge", "glutes"), ("standing dumbbell calf raise", "calves"), target_tags=["assistance", "posterior_chain", "calf_stiffness"]),
+                slot("core", ("plank", "abdominals"), ("reverse crunch", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
     ],

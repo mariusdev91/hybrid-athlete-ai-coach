@@ -21,6 +21,8 @@ from app.schemas.ai import GeneratedWorkoutPlan
 from app.schemas.ai import GeneratedWorkoutPlanItem
 from app.schemas.ai import WorkoutGenerationContext
 from app.schemas.ai import WorkoutGenerationRequest
+from app.services.exercise_taxonomy import infer_exercise_tags
+from app.services.exercise_taxonomy import infer_primary_family
 from app.services.exercise_lookup import exercise_lookup
 from app.services.sport_modules import build_basketball_strategy
 from app.services.sport_modules import build_football_strategy
@@ -429,6 +431,7 @@ class WorkoutGeneratorService:
                         selection_state=selection_state,
                         week_index=week["week_index"],
                         role=slot["role"],
+                        preferred_tags=slot.get("target_tags", []),
                     )
                     if not exercise:
                         continue
@@ -698,6 +701,7 @@ class WorkoutGeneratorService:
         selection_state: dict[str, Any],
         week_index: int,
         role: str,
+        preferred_tags: list[str],
     ) -> dict[str, Any] | None:
         normalized_equipment = {item.lower() for item in allowed_equipment}
         candidates: dict[str, dict[str, Any]] = {}
@@ -728,6 +732,7 @@ class WorkoutGeneratorService:
                     selection_state=selection_state,
                     week_index=week_index,
                     role=role,
+                    preferred_tags=preferred_tags,
                 ),
             ).copy()
 
@@ -749,6 +754,7 @@ class WorkoutGeneratorService:
                     selection_state=selection_state,
                     week_index=week_index,
                     role=role,
+                    preferred_tags=preferred_tags,
                 ),
             ).copy()
 
@@ -813,6 +819,7 @@ class WorkoutGeneratorService:
         selection_state: dict[str, Any],
         week_index: int,
         role: str,
+        preferred_tags: list[str],
     ) -> tuple[float, float]:
         match_score = self._score_exercise_match(exercise, exercise["source_query"])
         diversity_bonus = self._score_diversity_bonus(
@@ -821,8 +828,9 @@ class WorkoutGeneratorService:
             week_index=week_index,
             role=role,
         )
+        tag_bonus = self._score_tag_alignment(exercise, preferred_tags)
         return (
-            match_score + diversity_bonus,
+            match_score + diversity_bonus + tag_bonus,
             -float(exercise.get("distance", 999999.0)),
         )
 
@@ -860,30 +868,49 @@ class WorkoutGeneratorService:
         return score
 
     def _infer_exercise_family(self, exercise: dict[str, Any]) -> str:
-        text = normalize_text(" ".join(filter(None, [exercise.get("name", ""), exercise.get("source_query", "")])))
-        family_keywords = (
-            ("box_jump", ("box jump",)),
-            ("jump_squat", ("jump squat", "rocket jump", "split jump", "knee tuck jump")),
-            ("hop_bound", ("hop", "bound", "stride jump", "standing long jump")),
-            ("sprint", ("sprint",)),
-            ("lunge_split_squat", ("split squat", "lunge")),
-            ("squat", ("squat",)),
-            ("hamstring_resilience", ("hamstring", "leg curl")),
-            ("adductor_resilience", ("groin", "adductor")),
-            ("glute_bridge", ("glute bridge",)),
-            ("calf", ("calf",)),
-            ("row", ("row",)),
-            ("push", ("push", "push-up", "pushup")),
-            ("medicine_ball_power", ("medicine ball", "slam", "throw")),
-            ("plank_bridge", ("plank", "side bridge")),
-            ("crunch", ("crunch",)),
-            ("mobility", ("stretch", "smr")),
+        return infer_primary_family(self._infer_exercise_tags(exercise))
+
+    def _infer_exercise_tags(self, exercise: dict[str, Any]) -> set[str]:
+        return infer_exercise_tags(
+            name=exercise.get("name"),
+            query=exercise.get("source_query"),
+            equipment=exercise.get("equipment"),
+            primary_muscles=exercise.get("primary_muscles"),
+            secondary_muscles=exercise.get("secondary_muscles"),
         )
 
-        for family, keywords in family_keywords:
-            if any(keyword in text for keyword in keywords):
-                return family
-        return text.split(" ")[0] if text else "general"
+    def _score_tag_alignment(self, exercise: dict[str, Any], preferred_tags: list[str]) -> float:
+        if not preferred_tags:
+            return 0.0
+
+        exercise_tags = self._infer_exercise_tags(exercise)
+        if not exercise_tags:
+            return -2.0
+
+        normalized_preferred = {normalize_text(tag).replace(" ", "_") for tag in preferred_tags}
+        exact_matches = exercise_tags & normalized_preferred
+        if exact_matches:
+            return 6.0 + (len(exact_matches) * 2.0)
+
+        soft_links = {
+            "speed": {"acceleration", "max_speed", "repeat_sprint", "change_of_direction"},
+            "elastic": {"plyometric", "vertical_power", "horizontal_power", "lateral_power"},
+            "force": {"lower_strength", "unilateral_lower", "posterior_chain"},
+            "conditioning": {"repeat_sprint", "max_speed"},
+            "assistance": {"posterior_chain", "hamstring_resilience", "adductor_resilience", "calf_stiffness"},
+            "upper_strength": {"upper_push", "upper_pull", "medicine_ball_power"},
+            "core": {"trunk_stability"},
+            "mobility": {"mobility", "recovery"},
+        }
+
+        bonus = 0.0
+        for preferred in normalized_preferred:
+            related = soft_links.get(preferred, {preferred})
+            overlap = exercise_tags & related
+            if overlap:
+                bonus += 3.0 + float(len(overlap))
+
+        return bonus
 
     def _equipment_allowed(self, equipment: str | None, allowed_equipment: set[str]) -> bool:
         if not allowed_equipment:

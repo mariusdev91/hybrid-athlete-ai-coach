@@ -73,14 +73,14 @@ SEASON_CONFIG = {
 }
 
 
-def slot(role: str, *queries: tuple[str, str | None]):
+def slot(role: str, *queries: tuple[str, str | None], target_tags: list[str] | None = None):
     payload = []
     for query, primary in queries:
         item: dict[str, Any] = {"query": query}
         if primary:
             item["primary_muscles"] = [primary]
         payload.append(item)
-    return {"role": role, "queries": payload}
+    return {"role": role, "queries": payload, "target_tags": list(target_tags or [])}
 
 
 def rx(sets: int, reps: str, rest: int, rpe: int | None):
@@ -121,11 +121,11 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "first-step force, hamstring robustness, and sprint mechanics",
             "tags": ["acceleration", "hamstring_resilience", "speed"],
             "slots": [
-                slot("speed", ("single-cone sprint drill", "quadriceps"), ("wind sprints", "abdominals")),
-                slot("force", ("bodyweight walking lunge", "quadriceps"), ("split squat with dumbbells", "quadriceps"), ("goblet squat", "quadriceps")),
-                slot("assistance", ("single leg glute bridge", "glutes"), ("platform hamstring slides", "hamstrings"), ("hamstring stretch", "hamstrings")),
-                slot("core", ("plank", "abdominals"), ("reverse crunch", "abdominals")),
-                slot("mobility", ("seated floor hamstring stretch", None), ("standing hamstring and calf stretch", None)),
+                slot("speed", ("single-cone sprint drill", "quadriceps"), ("wind sprints", "abdominals"), target_tags=["speed", "acceleration"]),
+                slot("force", ("bodyweight walking lunge", "quadriceps"), ("split squat with dumbbells", "quadriceps"), ("goblet squat", "quadriceps"), target_tags=["force", "lower_strength", "unilateral_lower"]),
+                slot("assistance", ("single leg glute bridge", "glutes"), ("platform hamstring slides", "hamstrings"), ("hamstring stretch", "hamstrings"), target_tags=["assistance", "posterior_chain", "hamstring_resilience"]),
+                slot("core", ("plank", "abdominals"), ("reverse crunch", "abdominals"), target_tags=["core", "trunk_stability"]),
+                slot("mobility", ("seated floor hamstring stretch", None), ("standing hamstring and calf stretch", None), target_tags=["mobility", "recovery"]),
             ],
         },
         {
@@ -133,7 +133,7 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "top-speed support, calf stiffness, and elastic lower-leg work",
             "tags": ["max_speed", "repeat_sprint", "resilience"],
             "slots": [
-                slot("speed", ("wind sprints", "abdominals"), ("single-cone sprint drill", "quadriceps")),
+                slot("speed", ("wind sprints", "abdominals"), ("single-cone sprint drill", "quadriceps"), target_tags=["speed", "max_speed", "repeat_sprint"]),
                 slot(
                     "elastic",
                     ("front box jump", None),
@@ -144,10 +144,11 @@ FOOTBALL_TEMPLATE_LIBRARY = {
                     ("alternate leg diagonal bound", None),
                     ("standing long jump", None),
                     ("single-leg lateral hop", None),
+                    target_tags=["elastic", "plyometric", "horizontal_power", "lateral_power"],
                 ),
-                slot("assistance", ("standing dumbbell calf raise", "calves"), ("calf raise on a dumbbell", "calves"), ("single leg glute bridge", "glutes")),
-                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals")),
-                slot("mobility", ("hamstring stretch", None), ("seated floor hamstring stretch", None)),
+                slot("assistance", ("standing dumbbell calf raise", "calves"), ("calf raise on a dumbbell", "calves"), ("single leg glute bridge", "glutes"), target_tags=["assistance", "calf_stiffness", "posterior_chain"]),
+                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals"), target_tags=["core", "trunk_stability"]),
+                slot("mobility", ("hamstring stretch", None), ("seated floor hamstring stretch", None), target_tags=["mobility", "recovery"]),
             ],
         },
         {
@@ -155,11 +156,11 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "change of direction, deceleration control, and groin tolerance",
             "tags": ["change_of_direction", "adductor_resilience", "force"],
             "slots": [
-                slot("speed", ("side hop-sprint", "quadriceps"), ("single-cone sprint drill", "quadriceps")),
-                slot("force", ("crossover reverse lunge", "quadriceps"), ("bodyweight walking lunge", "quadriceps"), ("split squats", "quadriceps")),
-                slot("assistance", ("adductor/groin", "adductors"), ("groiners", "adductors"), ("side lying groin stretch", "adductors")),
-                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals")),
-                slot("mobility", ("groin and back stretch", None), ("hamstring stretch", None)),
+                slot("speed", ("side hop-sprint", "quadriceps"), ("single-cone sprint drill", "quadriceps"), target_tags=["speed", "change_of_direction", "acceleration"]),
+                slot("force", ("crossover reverse lunge", "quadriceps"), ("bodyweight walking lunge", "quadriceps"), ("split squats", "quadriceps"), target_tags=["force", "change_of_direction", "unilateral_lower"]),
+                slot("assistance", ("adductor/groin", "adductors"), ("groiners", "adductors"), ("side lying groin stretch", "adductors"), target_tags=["assistance", "adductor_resilience"]),
+                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals"), target_tags=["core", "trunk_stability"]),
+                slot("mobility", ("groin and back stretch", None), ("hamstring stretch", None), target_tags=["mobility", "recovery"]),
             ],
         },
         {
@@ -167,11 +168,11 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "repeat sprint ability and match-like work capacity",
             "tags": ["repeat_sprint", "conditioning", "acceleration"],
             "slots": [
-                slot("conditioning", ("wind sprints", "abdominals"), ("bench sprint", "quadriceps"), ("single-cone sprint drill", "quadriceps")),
-                slot("speed", ("side hop-sprint", "quadriceps"), ("wind sprints", "abdominals")),
-                slot("force", ("bodyweight walking lunge", "quadriceps"), ("single leg glute bridge", "glutes")),
-                slot("core", ("reverse crunch", "abdominals"), ("plank", "abdominals")),
-                slot("mobility", ("hamstring stretch", None), ("adductor/groin", "adductors")),
+                slot("conditioning", ("wind sprints", "abdominals"), ("bench sprint", "quadriceps"), ("single-cone sprint drill", "quadriceps"), target_tags=["conditioning", "repeat_sprint", "speed"]),
+                slot("speed", ("side hop-sprint", "quadriceps"), ("wind sprints", "abdominals"), target_tags=["speed", "acceleration"]),
+                slot("force", ("bodyweight walking lunge", "quadriceps"), ("single leg glute bridge", "glutes"), target_tags=["force", "unilateral_lower", "posterior_chain"]),
+                slot("core", ("reverse crunch", "abdominals"), ("plank", "abdominals"), target_tags=["core", "trunk_stability"]),
+                slot("mobility", ("hamstring stretch", None), ("adductor/groin", "adductors"), target_tags=["mobility", "adductor_resilience"]),
             ],
         },
     ],
@@ -181,7 +182,7 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "blend sprint qualities, elastic work, and football readiness",
             "tags": ["acceleration", "max_speed", "repeat_sprint"],
             "slots": [
-                slot("speed", ("single-cone sprint drill", "quadriceps"), ("wind sprints", "abdominals"), ("side hop-sprint", "quadriceps")),
+                slot("speed", ("single-cone sprint drill", "quadriceps"), ("wind sprints", "abdominals"), ("side hop-sprint", "quadriceps"), target_tags=["speed", "acceleration", "repeat_sprint"]),
                 slot(
                     "elastic",
                     ("front box jump", None),
@@ -189,9 +190,10 @@ FOOTBALL_TEMPLATE_LIBRARY = {
                     ("depth jump leap", None),
                     ("lateral bound", None),
                     ("single-leg hop progression", None),
+                    target_tags=["elastic", "plyometric", "horizontal_power", "change_of_direction"],
                 ),
-                slot("force", ("split squat with dumbbells", "quadriceps"), ("bodyweight walking lunge", "quadriceps")),
-                slot("core", ("plank", "abdominals"), ("side bridge", "abdominals")),
+                slot("force", ("split squat with dumbbells", "quadriceps"), ("bodyweight walking lunge", "quadriceps"), target_tags=["force", "unilateral_lower"]),
+                slot("core", ("plank", "abdominals"), ("side bridge", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
         {
@@ -199,10 +201,10 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "preserve force production while protecting the posterior chain",
             "tags": ["hamstring_resilience", "force", "resilience"],
             "slots": [
-                slot("force", ("split squat with dumbbells", "quadriceps"), ("goblet squat", "quadriceps"), ("bodyweight walking lunge", "quadriceps")),
-                slot("assistance", ("single leg glute bridge", "glutes"), ("platform hamstring slides", "hamstrings"), ("hamstring stretch", "hamstrings")),
-                slot("assistance", ("standing dumbbell calf raise", "calves"), ("calf raise on a dumbbell", "calves")),
-                slot("core", ("reverse crunch", "abdominals"), ("plank", "abdominals")),
+                slot("force", ("split squat with dumbbells", "quadriceps"), ("goblet squat", "quadriceps"), ("bodyweight walking lunge", "quadriceps"), target_tags=["force", "lower_strength", "unilateral_lower"]),
+                slot("assistance", ("single leg glute bridge", "glutes"), ("platform hamstring slides", "hamstrings"), ("hamstring stretch", "hamstrings"), target_tags=["assistance", "posterior_chain", "hamstring_resilience"]),
+                slot("assistance", ("standing dumbbell calf raise", "calves"), ("calf raise on a dumbbell", "calves"), target_tags=["assistance", "calf_stiffness"]),
+                slot("core", ("reverse crunch", "abdominals"), ("plank", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
         {
@@ -210,10 +212,10 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "prepare for repeated high-intensity efforts with short recoveries",
             "tags": ["repeat_sprint", "conditioning"],
             "slots": [
-                slot("conditioning", ("wind sprints", "abdominals"), ("bench sprint", "quadriceps")),
-                slot("speed", ("single-cone sprint drill", "quadriceps"), ("side hop-sprint", "quadriceps")),
-                slot("mobility", ("hamstring stretch", None), ("adductor/groin", "adductors")),
-                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals")),
+                slot("conditioning", ("wind sprints", "abdominals"), ("bench sprint", "quadriceps"), target_tags=["conditioning", "repeat_sprint"]),
+                slot("speed", ("single-cone sprint drill", "quadriceps"), ("side hop-sprint", "quadriceps"), target_tags=["speed", "acceleration", "change_of_direction"]),
+                slot("mobility", ("hamstring stretch", None), ("adductor/groin", "adductors"), target_tags=["mobility", "hamstring_resilience", "adductor_resilience"]),
+                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
         {
@@ -221,9 +223,9 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "keep hips, groins, and calves ready for competition density",
             "tags": ["mobility", "adductor_resilience", "resilience"],
             "slots": [
-                slot("mobility", ("adductor/groin", "adductors"), ("side lying groin stretch", "adductors"), ("groiners", "adductors")),
-                slot("assistance", ("single leg glute bridge", "glutes"), ("standing dumbbell calf raise", "calves")),
-                slot("core", ("plank", "abdominals"), ("side bridge", "abdominals")),
+                slot("mobility", ("adductor/groin", "adductors"), ("side lying groin stretch", "adductors"), ("groiners", "adductors"), target_tags=["mobility", "adductor_resilience"]),
+                slot("assistance", ("single leg glute bridge", "glutes"), ("standing dumbbell calf raise", "calves"), target_tags=["assistance", "posterior_chain", "calf_stiffness"]),
+                slot("core", ("plank", "abdominals"), ("side bridge", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
     ],
@@ -233,15 +235,16 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "keep sprint sharpness alive without adding match fatigue",
             "tags": ["acceleration", "max_speed", "speed"],
             "slots": [
-                slot("speed", ("single-cone sprint drill", "quadriceps"), ("wind sprints", "abdominals")),
+                slot("speed", ("single-cone sprint drill", "quadriceps"), ("wind sprints", "abdominals"), target_tags=["speed", "acceleration"]),
                 slot(
                     "elastic",
                     ("front box jump", None),
                     ("freehand jump squat", None),
                     ("lateral cone hops", None),
                     ("standing long jump", None),
+                    target_tags=["elastic", "plyometric", "horizontal_power"],
                 ),
-                slot("core", ("plank", "abdominals"), ("side bridge", "abdominals")),
+                slot("core", ("plank", "abdominals"), ("side bridge", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
         {
@@ -249,10 +252,10 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "micro-dose lower-body force and posterior chain support",
             "tags": ["force", "hamstring_resilience"],
             "slots": [
-                slot("force", ("split squat with dumbbells", "quadriceps"), ("bodyweight walking lunge", "quadriceps")),
-                slot("assistance", ("single leg glute bridge", "glutes"), ("standing dumbbell calf raise", "calves")),
-                slot("assistance", ("hamstring stretch", "hamstrings"), ("adductor/groin", "adductors")),
-                slot("core", ("reverse crunch", "abdominals"), ("plank", "abdominals")),
+                slot("force", ("split squat with dumbbells", "quadriceps"), ("bodyweight walking lunge", "quadriceps"), target_tags=["force", "unilateral_lower"]),
+                slot("assistance", ("single leg glute bridge", "glutes"), ("standing dumbbell calf raise", "calves"), target_tags=["assistance", "posterior_chain", "calf_stiffness"]),
+                slot("assistance", ("hamstring stretch", "hamstrings"), ("adductor/groin", "adductors"), target_tags=["assistance", "hamstring_resilience", "adductor_resilience"]),
+                slot("core", ("reverse crunch", "abdominals"), ("plank", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
         {
@@ -260,9 +263,9 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "restore range of motion and reduce soft-tissue stress between matches",
             "tags": ["mobility", "adductor_resilience", "resilience"],
             "slots": [
-                slot("mobility", ("adductor/groin", "adductors"), ("side lying groin stretch", "adductors"), ("groiners", "adductors")),
-                slot("mobility", ("hamstring stretch", None), ("seated floor hamstring stretch", None)),
-                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals")),
+                slot("mobility", ("adductor/groin", "adductors"), ("side lying groin stretch", "adductors"), ("groiners", "adductors"), target_tags=["mobility", "adductor_resilience"]),
+                slot("mobility", ("hamstring stretch", None), ("seated floor hamstring stretch", None), target_tags=["mobility", "hamstring_resilience"]),
+                slot("core", ("side bridge", "abdominals"), ("plank", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
         {
@@ -270,9 +273,9 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "keep repeat sprint exposure alive when the fixture list allows",
             "tags": ["repeat_sprint", "conditioning"],
             "slots": [
-                slot("conditioning", ("wind sprints", "abdominals"), ("bench sprint", "quadriceps")),
-                slot("speed", ("single-cone sprint drill", "quadriceps"), ("side hop-sprint", "quadriceps")),
-                slot("mobility", ("hamstring stretch", None), ("adductor/groin", "adductors")),
+                slot("conditioning", ("wind sprints", "abdominals"), ("bench sprint", "quadriceps"), target_tags=["conditioning", "repeat_sprint"]),
+                slot("speed", ("single-cone sprint drill", "quadriceps"), ("side hop-sprint", "quadriceps"), target_tags=["speed", "acceleration", "change_of_direction"]),
+                slot("mobility", ("hamstring stretch", None), ("adductor/groin", "adductors"), target_tags=["mobility", "hamstring_resilience", "adductor_resilience"]),
             ],
         },
     ],
@@ -282,9 +285,9 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "restore joints, adductors, hamstrings, and general movement options",
             "tags": ["mobility", "resilience", "adductor_resilience"],
             "slots": [
-                slot("mobility", ("adductor/groin", "adductors"), ("side lying groin stretch", "adductors"), ("groiners", "adductors")),
-                slot("mobility", ("hamstring stretch", None), ("seated floor hamstring stretch", None)),
-                slot("core", ("plank", "abdominals"), ("side bridge", "abdominals")),
+                slot("mobility", ("adductor/groin", "adductors"), ("side lying groin stretch", "adductors"), ("groiners", "adductors"), target_tags=["mobility", "adductor_resilience"]),
+                slot("mobility", ("hamstring stretch", None), ("seated floor hamstring stretch", None), target_tags=["mobility", "hamstring_resilience"]),
+                slot("core", ("plank", "abdominals"), ("side bridge", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
         {
@@ -292,10 +295,10 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "rebuild lower-body force and soft-tissue tolerance",
             "tags": ["force", "hamstring_resilience", "resilience"],
             "slots": [
-                slot("force", ("bodyweight walking lunge", "quadriceps"), ("split squat with dumbbells", "quadriceps")),
-                slot("assistance", ("single leg glute bridge", "glutes"), ("standing dumbbell calf raise", "calves")),
-                slot("assistance", ("hamstring stretch", "hamstrings"), ("adductor/groin", "adductors")),
-                slot("core", ("reverse crunch", "abdominals"), ("plank", "abdominals")),
+                slot("force", ("bodyweight walking lunge", "quadriceps"), ("split squat with dumbbells", "quadriceps"), target_tags=["force", "unilateral_lower"]),
+                slot("assistance", ("single leg glute bridge", "glutes"), ("standing dumbbell calf raise", "calves"), target_tags=["assistance", "posterior_chain", "calf_stiffness"]),
+                slot("assistance", ("hamstring stretch", "hamstrings"), ("adductor/groin", "adductors"), target_tags=["assistance", "hamstring_resilience", "adductor_resilience"]),
+                slot("core", ("reverse crunch", "abdominals"), ("plank", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
         {
@@ -303,10 +306,10 @@ FOOTBALL_TEMPLATE_LIBRARY = {
             "focus": "bridge recovery work back toward football-ready training",
             "tags": ["conditioning", "acceleration"],
             "slots": [
-                slot("conditioning", ("wind sprints", "abdominals"), ("single-cone sprint drill", "quadriceps")),
-                slot("force", ("bodyweight walking lunge", "quadriceps"), ("split squat with dumbbells", "quadriceps")),
-                slot("mobility", ("hamstring stretch", None), ("adductor/groin", "adductors")),
-                slot("core", ("plank", "abdominals"), ("side bridge", "abdominals")),
+                slot("conditioning", ("wind sprints", "abdominals"), ("single-cone sprint drill", "quadriceps"), target_tags=["conditioning", "repeat_sprint"]),
+                slot("force", ("bodyweight walking lunge", "quadriceps"), ("split squat with dumbbells", "quadriceps"), target_tags=["force", "unilateral_lower"]),
+                slot("mobility", ("hamstring stretch", None), ("adductor/groin", "adductors"), target_tags=["mobility", "hamstring_resilience", "adductor_resilience"]),
+                slot("core", ("plank", "abdominals"), ("side bridge", "abdominals"), target_tags=["core", "trunk_stability"]),
             ],
         },
     ],
