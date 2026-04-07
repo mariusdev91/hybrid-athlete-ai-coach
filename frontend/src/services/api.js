@@ -75,6 +75,12 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+  previewPlan(payload) {
+    return request("/ai/preview-plan", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
   listWorkoutPlans(userId) {
     return request(`/db/users/${userId}/workout-plans`);
   },

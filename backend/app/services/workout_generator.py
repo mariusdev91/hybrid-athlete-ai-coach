@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import date
+from datetime import timedelta
 from math import ceil
 from typing import Any
 
@@ -322,6 +324,10 @@ class WorkoutGeneratorService:
         profile_equipment = list(profile.equipment_access) if profile else []
         equipment_access = request.equipment_access or profile_equipment
         return WorkoutGenerationContext(
+            age_years=profile.age_years if profile else None,
+            gender=profile.gender if profile else None,
+            height_cm=profile.height_cm if profile else None,
+            weight_kg=profile.weight_kg if profile else None,
             primary_sport=profile.primary_sport if profile else None,
             experience_level=profile.experience_level if profile else None,
             equipment_access=equipment_access,
@@ -343,9 +349,11 @@ class WorkoutGeneratorService:
         goal_track = self._resolve_goal_track(goal, focus)
         title = request.title or self._build_title(focus, goal)
         description = request.description or self._build_description(focus, goal, context, request.duration_weeks)
+        start_date = request.start_date or date.today()
 
         templates = self._resolve_templates(goal, focus, session_count)
         phase_schedule = self._build_phase_schedule(request.duration_weeks, goal_track)
+        day_offsets = self._resolve_training_day_offsets(session_count)
         search_queries: list[str] = []
         items: list[GeneratedWorkoutPlanItem] = []
         max_slots_per_day = 3 if context.session_duration_minutes and context.session_duration_minutes < 45 else 4
@@ -355,6 +363,9 @@ class WorkoutGeneratorService:
                 used_ids: set[str] = set()
                 session_label = template["label"]
                 session_focus = self._build_session_focus(template, week)
+                planned_date = start_date + timedelta(
+                    days=((week["week_index"] - 1) * 7) + day_offsets[day_index - 1]
+                )
 
                 for sequence_index, slot in enumerate(template["slots"][:max_slots_per_day], start=1):
                     exercise = self._pick_exercise(
@@ -380,6 +391,7 @@ class WorkoutGeneratorService:
                             session_label=session_label,
                             session_focus=session_focus,
                             phase_name=week["phase_name"],
+                            planned_date=planned_date,
                             exercise_id=exercise.get("id"),
                             exercise_name=exercise["name"],
                             equipment=exercise.get("equipment"),
@@ -398,6 +410,7 @@ class WorkoutGeneratorService:
             title=title,
             description=description,
             focus=focus,
+            start_date=start_date,
             duration_weeks=request.duration_weeks,
             sessions_per_week=session_count,
             status="draft",
@@ -418,6 +431,7 @@ class WorkoutGeneratorService:
             title=plan.title,
             description=plan.description,
             focus=plan.focus,
+            start_date=plan.start_date,
             duration_weeks=plan.duration_weeks,
             sessions_per_week=plan.sessions_per_week,
             status=plan.status,
@@ -435,6 +449,7 @@ class WorkoutGeneratorService:
                     session_label=item.session_label,
                     session_focus=item.session_focus,
                     phase_name=item.phase_name,
+                    planned_date=item.planned_date,
                     exercise_id=item.exercise_id,
                     exercise_name=item.exercise_name,
                     prescribed_sets=item.prescribed_sets,
@@ -509,6 +524,18 @@ class WorkoutGeneratorService:
         for index in range(session_count):
             selected.append(templates[index % len(templates)])
         return selected
+
+    def _resolve_training_day_offsets(self, session_count: int) -> list[int]:
+        spacing_map = {
+            1: [0],
+            2: [0, 3],
+            3: [0, 2, 4],
+            4: [0, 2, 4, 6],
+            5: [0, 1, 3, 5, 6],
+            6: [0, 1, 2, 4, 5, 6],
+            7: [0, 1, 2, 3, 4, 5, 6],
+        }
+        return spacing_map.get(session_count, spacing_map[4])
 
     def _build_phase_schedule(self, duration_weeks: int, goal_track: str) -> list[dict[str, Any]]:
         if duration_weeks <= 1:

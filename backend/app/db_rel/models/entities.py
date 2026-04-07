@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from sqlalchemy import Date
 from sqlalchemy import DateTime
+from sqlalchemy import Float
 from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import JSON
@@ -75,7 +76,10 @@ class AthleteProfile(TimestampMixin, Base):
         nullable=False,
     )
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    age_years: Mapped[int | None] = mapped_column(Integer, nullable=True)
     gender: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    height_cm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     primary_sport: Mapped[str | None] = mapped_column(String(100), nullable=True)
     experience_level: Mapped[str | None] = mapped_column(String(50), nullable=True)
     training_days_per_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -126,6 +130,7 @@ class WorkoutPlan(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     focus: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     duration_weeks: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sessions_per_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="draft", nullable=False)
@@ -160,6 +165,7 @@ class WorkoutPlanItem(Base):
     session_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     session_focus: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phase_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    planned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     exercise_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     exercise_name: Mapped[str] = mapped_column(String(255), nullable=False)
     prescribed_sets: Mapped[int | None] = mapped_column(Integer, nullable=True)

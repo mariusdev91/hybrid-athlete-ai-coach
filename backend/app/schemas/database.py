@@ -34,7 +34,10 @@ class UserRead(ORMBaseModel):
 class AthleteProfileCreate(BaseModel):
     user_id: str
     birth_date: date | None = None
+    age_years: int | None = Field(default=None, ge=1, le=120)
     gender: str | None = None
+    height_cm: int | None = Field(default=None, ge=80, le=260)
+    weight_kg: float | None = Field(default=None, gt=20, le=400)
     primary_sport: str | None = None
     experience_level: str | None = None
     training_days_per_week: int | None = None
@@ -45,7 +48,10 @@ class AthleteProfileCreate(BaseModel):
 
 class AthleteProfileUpsert(BaseModel):
     birth_date: date | None = None
+    age_years: int | None = Field(default=None, ge=1, le=120)
     gender: str | None = None
+    height_cm: int | None = Field(default=None, ge=80, le=260)
+    weight_kg: float | None = Field(default=None, gt=20, le=400)
     primary_sport: str | None = None
     experience_level: str | None = None
     training_days_per_week: int | None = None
@@ -58,7 +64,10 @@ class AthleteProfileRead(ORMBaseModel):
     id: str
     user_id: str
     birth_date: date | None = None
+    age_years: int | None = None
     gender: str | None = None
+    height_cm: int | None = None
+    weight_kg: float | None = None
     primary_sport: str | None = None
     experience_level: str | None = None
     training_days_per_week: int | None = None
@@ -99,6 +108,7 @@ class WorkoutPlanItemInlineCreate(BaseModel):
     session_label: str | None = None
     session_focus: str | None = None
     phase_name: str | None = None
+    planned_date: date | None = None
     exercise_id: str | None = None
     exercise_name: str
     prescribed_sets: int | None = Field(default=None, ge=1)
@@ -121,6 +131,7 @@ class WorkoutPlanItemRead(ORMBaseModel):
     session_label: str | None = None
     session_focus: str | None = None
     phase_name: str | None = None
+    planned_date: date | None = None
     exercise_id: str | None = None
     exercise_name: str
     prescribed_sets: int | None = None
@@ -136,6 +147,7 @@ class WorkoutPlanCreate(BaseModel):
     title: str
     description: str | None = None
     focus: str | None = None
+    start_date: date | None = None
     duration_weeks: int | None = None
     sessions_per_week: int | None = None
     status: str = "draft"
@@ -149,6 +161,7 @@ class WorkoutPlanRead(ORMBaseModel):
     title: str
     description: str | None = None
     focus: str | None = None
+    start_date: date | None = None
     duration_weeks: int | None = None
     sessions_per_week: int | None = None
     status: str

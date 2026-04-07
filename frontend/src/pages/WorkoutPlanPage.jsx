@@ -1,6 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { buildPlanCalendar, getPlanOverview, getSessionSummary } from "../lib/plan-utils.js";
+import {
+  buildCurrentMonthCalendar,
+  buildPlanDateIndex,
+  getPlanOverview,
+} from "../lib/plan-utils.js";
 import { api } from "../services/api.js";
 
 function WorkoutPlanPage() {
@@ -11,13 +15,15 @@ function WorkoutPlanPage() {
   const [isSavingSession, setIsSavingSession] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [sessionStatusMessage, setSessionStatusMessage] = useState("");
-  const [selectedSessionKey, setSelectedSessionKey] = useState("");
+  const [selectedDateKey, setSelectedDateKey] = useState("");
   const [sessionForm, setSessionForm] = useState(buildDefaultSessionForm());
 
-  const calendar = buildPlanCalendar(plan);
   const overview = getPlanOverview(plan);
-  const selectedSession = findSession(calendar, selectedSessionKey);
-  const sessionLogIndex = buildSessionLogIndex(workoutSessions);
+  const dateIndex = useMemo(() => buildPlanDateIndex(plan), [plan]);
+  const monthCalendar = useMemo(() => buildCurrentMonthCalendar(plan), [plan]);
+  const selectedDay = findDayByKey(monthCalendar.weeks, selectedDateKey);
+  const selectedSession = selectedDay?.session || dateIndex[selectedDateKey] || null;
+  const sessionLogIndex = buildSessionLogIndex(workoutSessions, dateIndex);
   const selectedSessionLogs = getLogsForSession(workoutSessions, selectedSession);
   const loggedDayCount = Object.keys(sessionLogIndex).length;
 
@@ -59,23 +65,28 @@ function WorkoutPlanPage() {
   }, [planId]);
 
   useEffect(() => {
-    if (!calendar.length) {
+    if (!monthCalendar.weeks.length || selectedDateKey) {
       return;
     }
 
-    if (!selectedSessionKey) {
-      setSelectedSessionKey(calendar[0].days[0]?.key || "");
+    const todayCell = findDayByKey(monthCalendar.weeks, monthCalendar.todayKey);
+    if (todayCell) {
+      setSelectedDateKey(todayCell.key);
+      return;
     }
-  }, [calendar, selectedSessionKey]);
+
+    const firstCurrentMonthDay = monthCalendar.weeks.flat().find((day) => day.inCurrentMonth);
+    setSelectedDateKey(firstCurrentMonthDay?.key || "");
+  }, [monthCalendar, selectedDateKey]);
 
   useEffect(() => {
-    if (!selectedSessionKey) {
+    if (!selectedDateKey) {
       return;
     }
 
     setSessionStatusMessage("");
     setSessionForm(buildDefaultSessionForm());
-  }, [selectedSessionKey]);
+  }, [selectedDateKey]);
 
   async function handleDownloadWorkbook() {
     if (!plan) {
@@ -118,7 +129,7 @@ function WorkoutPlanPage() {
         perceived_exertion: "",
         notes: "",
       }));
-      setSessionStatusMessage("Session logged for the selected training day.");
+      setSessionStatusMessage("Sesiunea a fost logata pentru ziua selectata.");
     } catch (error) {
       setErrorMessage(error.message);
     } finally {
@@ -134,131 +145,127 @@ function WorkoutPlanPage() {
       <header className="hero plan-hero">
         <div className="hero-copy">
           <p className="eyebrow">Workout Calendar</p>
-          <h1>See the whole cycle, then drill into any training day.</h1>
+          <h1>Calendarul lunii curente iti arata exact ce ai de facut in fiecare zi.</h1>
           <p className="hero-text">
-            This page turns the saved plan into a weekly calendar view, with one-click
-            detail for each training day, a real session log, and an Excel export split
-            into weekly sheets.
+            Ziua curenta este evidentiata, iar zilele cu sesiuni programate afiseaza un
+            preview rapid. Poti selecta orice zi pentru a vedea antrenamentul complet si
+            pentru a loga executia.
           </p>
-          <div className="button-row">
-            <Link className="secondary-link" to="/">
-              Back To Dashboard
-            </Link>
-            <button
-              className="action-button"
-              disabled={!plan}
-              onClick={() => {
-                void handleDownloadWorkbook();
-              }}
-              type="button"
-            >
-              Download Excel
-            </button>
-          </div>
         </div>
 
-        <div className="status-panel">
-          {plan ? (
-            <div className="status-grid">
-              <article className="status-card">
-                <span className="status-label">Weeks</span>
-                <strong>{overview.totalWeeks}</strong>
-              </article>
-              <article className="status-card">
-                <span className="status-label">Sessions</span>
-                <strong>{overview.totalSessions}</strong>
-              </article>
-              <article className="status-card">
-                <span className="status-label">Exercises</span>
-                <strong>{overview.totalExercises}</strong>
-              </article>
-              <article className="status-card">
-                <span className="status-label">Logged Days</span>
-                <strong>{loggedDayCount}</strong>
-              </article>
-            </div>
-          ) : (
-            <div className="placeholder">Plan metrics will appear here once the page loads.</div>
-          )}
+        <div className="plan-header-actions">
+          <Link className="secondary-link" to="/">
+            Back To Dashboard
+          </Link>
+          <button
+            className="action-button"
+            disabled={!plan}
+            onClick={() => {
+              void handleDownloadWorkbook();
+            }}
+            type="button"
+          >
+            Download Plan
+          </button>
         </div>
       </header>
 
       {errorMessage ? <div className="banner error">{errorMessage}</div> : null}
       {sessionStatusMessage ? <div className="banner success">{sessionStatusMessage}</div> : null}
 
-      <main className="plan-page-grid">
+      <section className="hero plan-metrics">
+        <div className="status-panel">
+          <div className="status-grid">
+            <article className="status-card">
+              <span className="status-label">Current Month</span>
+              <strong>{monthCalendar.monthLabel}</strong>
+            </article>
+            <article className="status-card">
+              <span className="status-label">Scheduled Days</span>
+              <strong>{monthCalendar.totalScheduledDays}</strong>
+            </article>
+            <article className="status-card">
+              <span className="status-label">Total Sessions</span>
+              <strong>{overview.totalSessions}</strong>
+            </article>
+            <article className="status-card">
+              <span className="status-label">Logged Days</span>
+              <strong>{loggedDayCount}</strong>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <main className="plan-page-grid month-page-grid">
         <section className="panel">
           <header className="panel-header">
-            <h2>{plan?.title || "Plan Calendar"}</h2>
-            <p>{plan?.description || "Saved workout plan overview."}</p>
+            <h2>{plan?.title || "Monthly Plan Calendar"}</h2>
+            <p>{plan?.description || "Plan monthly overview."}</p>
           </header>
 
           {isLoading ? (
-            <div className="placeholder">Loading the saved plan...</div>
-          ) : calendar.length > 0 ? (
-            <div className="calendar-week-stack">
-              {calendar.map((week) => (
-                <article className="week-panel" key={week.weekIndex}>
-                  <header className="week-panel-header">
-                    <div>
-                      <p className="eyebrow">Week {week.weekIndex}</p>
-                      <h3>{week.phaseName}</h3>
-                    </div>
-                    <span className="micro-copy">{week.days.length} training days</span>
-                  </header>
-
-                  <div className="calendar-grid">
-                    {week.days.map((session) => (
-                      <button
-                        className={`calendar-day-card ${
-                          selectedSessionKey === session.key ? "is-active" : ""
-                        }`}
-                        key={session.key}
-                        onClick={() => setSelectedSessionKey(session.key)}
-                        type="button"
-                      >
-                        <div className="calendar-day-topline">
-                          <span>Day {session.dayIndex}</span>
-                          <strong>{session.items.length} moves</strong>
-                        </div>
-                        <h4>{session.sessionLabel}</h4>
-                        <p>{session.sessionFocus}</p>
-                        <div className="calendar-session-state">
-                          {sessionLogIndex[session.key] ? (
-                            <>
-                              <span
-                                className={`session-pill status-${sessionLogIndex[session.key].latestStatus}`}
-                              >
-                                {formatSessionStatus(sessionLogIndex[session.key].latestStatus)}
-                              </span>
-                              <span>{sessionLogIndex[session.key].count} logs</span>
-                            </>
-                          ) : (
-                            <span className="session-pill status-pending">Not logged yet</span>
-                          )}
-                        </div>
-                        <div className="calendar-exercise-preview">
-                          {session.items.slice(0, 3).map((item) => (
-                            <span key={item.id || `${session.key}-${item.sequence_index}`}>
-                              {item.exercise_name}
-                            </span>
-                          ))}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </article>
-              ))}
-            </div>
+            <div className="placeholder">Loading the monthly calendar...</div>
           ) : (
-            <div className="placeholder">No calendar data available for this plan yet.</div>
+            <div className="month-calendar">
+              <div className="month-weekdays">
+                {monthCalendar.weekdayLabels.map((label) => (
+                  <span className="month-weekday" key={label}>
+                    {label}
+                  </span>
+                ))}
+              </div>
+
+              <div className="month-grid">
+                {monthCalendar.weeks.flat().map((day) => {
+                  const sessionState = sessionLogIndex[day.key];
+                  return (
+                    <button
+                      className={[
+                        "month-day-card",
+                        day.inCurrentMonth ? "" : "is-outside",
+                        day.isToday ? "is-today" : "",
+                        selectedDateKey === day.key ? "is-active" : "",
+                        day.session ? "has-session" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      key={day.key}
+                      onClick={() => setSelectedDateKey(day.key)}
+                      type="button"
+                    >
+                      <div className="month-day-topline">
+                        <span>{day.dayNumber}</span>
+                        {day.isToday ? <strong>Today</strong> : null}
+                      </div>
+
+                      {day.session ? (
+                        <div className="month-day-session">
+                          <h4>{day.session.sessionLabel}</h4>
+                          <p>{day.session.items.length} exercitii</p>
+                          <span className={`session-pill status-${sessionState?.latestStatus || "pending"}`}>
+                            {sessionState ? formatSessionStatus(sessionState.latestStatus) : "Planned"}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="month-day-empty">
+                          <p>No workout</p>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </section>
 
         <aside className="panel sticky-panel">
           <header className="panel-header">
-            <h2>Day Detail</h2>
-            <p>Click one of the training days to inspect the workout content.</p>
+            <h2>{selectedDateKey ? formatDateLabel(selectedDateKey) : "Day Detail"}</h2>
+            <p>
+              Selecteaza o zi din calendar. Daca exista un antrenament programat, il vezi
+              aici impreuna cu istoricul si formularul de tracking.
+            </p>
           </header>
 
           {selectedSession ? (
@@ -266,16 +273,17 @@ function WorkoutPlanPage() {
               <div className="summary-card">
                 <strong>{selectedSession.sessionLabel}</strong>
                 <ul className="plain-list">
-                  {getSessionSummary(selectedSession).map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
+                  <li>Data: {selectedSession.isoDate || selectedDateKey}</li>
+                  <li>Phase: {selectedSession.phaseName || "n/a"}</li>
+                  <li>Focus: {selectedSession.sessionFocus || "n/a"}</li>
+                  <li>Exercises: {selectedSession.items.length}</li>
                 </ul>
               </div>
 
               <section className="summary-card">
                 <strong>Session Tracking</strong>
                 <p className="micro-copy">
-                  Log completion, duration, RPE, or notes for this exact training day.
+                  Logheaza executia, durata si perceptia efortului pentru ziua selectata.
                 </p>
 
                 <form className="stack" onSubmit={handleLogSession}>
@@ -340,7 +348,7 @@ function WorkoutPlanPage() {
                           notes: event.target.value,
                         }))
                       }
-                      placeholder="How did the session feel? Any swaps or pain notes?"
+                      placeholder="Cum a mers sesiunea? Ai facut ajustari?"
                       rows="4"
                       value={sessionForm.notes}
                     />
@@ -373,7 +381,7 @@ function WorkoutPlanPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="placeholder">No session has been logged for this day yet.</div>
+                  <div className="placeholder">Nu exista inca nicio sesiune logata pentru aceasta zi.</div>
                 )}
               </section>
 
@@ -396,7 +404,10 @@ function WorkoutPlanPage() {
               ))}
             </div>
           ) : (
-            <div className="placeholder">Pick a training day to inspect the session.</div>
+            <div className="placeholder">
+              Nu exista antrenament programat pentru ziua selectata. Poti alege o alta zi sau
+              poti folosi aceasta vedere ca orientare in calendarul curent.
+            </div>
           )}
         </aside>
       </main>
@@ -404,10 +415,10 @@ function WorkoutPlanPage() {
   );
 }
 
-function findSession(calendar, sessionKey) {
-  for (const week of calendar) {
-    for (const day of week.days) {
-      if (day.key === sessionKey) {
+function findDayByKey(weeks, key) {
+  for (const week of weeks || []) {
+    for (const day of week) {
+      if (day.key === key) {
         return day;
       }
     }
@@ -425,11 +436,11 @@ function buildDefaultSessionForm() {
   };
 }
 
-function buildSessionLogIndex(workoutSessions = []) {
+function buildSessionLogIndex(workoutSessions = [], dateIndex = {}) {
   const index = {};
 
   for (const session of workoutSessions) {
-    const key = `${session.week_index || 1}-${session.day_index || 1}`;
+    const key = resolveSessionDateKey(session, dateIndex);
     const current = index[key];
 
     if (!current) {
@@ -443,10 +454,19 @@ function buildSessionLogIndex(workoutSessions = []) {
     index[key] = {
       ...current,
       count: current.count + 1,
+      latestStatus: session.status || current.latestStatus,
     };
   }
 
   return index;
+}
+
+function resolveSessionDateKey(session, dateIndex) {
+  const match = Object.values(dateIndex).find(
+    (entry) =>
+      entry.weekIndex === (session.week_index || 1) && entry.dayIndex === (session.day_index || 1),
+  );
+  return match?.isoDate || `${session.week_index || 1}-${session.day_index || 1}`;
 }
 
 function getLogsForSession(workoutSessions = [], session) {
@@ -489,6 +509,23 @@ function formatTimestamp(value) {
     }).format(new Date(value));
   } catch {
     return String(value);
+  }
+}
+
+function formatDateLabel(value) {
+  if (!value) {
+    return "Day Detail";
+  }
+
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(new Date(value));
+  } catch {
+    return value;
   }
 }
 
