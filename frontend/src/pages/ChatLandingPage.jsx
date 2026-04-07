@@ -3,12 +3,31 @@ import { Link, useNavigate } from "react-router-dom";
 import { buildPlanSessions, slugify } from "../lib/plan-utils.js";
 import { api } from "../services/api.js";
 
-const QUESTION_FLOW = [
+const SPORT_QUESTION_FLOW = [
   { key: "full_name", prompt: "Cum te numesti?", type: "text" },
   { key: "age_years", prompt: "Cati ani ai?", type: "number" },
   { key: "height_cm", prompt: "Ce inaltime ai in centimetri?", type: "number" },
   { key: "weight_kg", prompt: "Ce greutate ai in kilograme?", type: "number" },
-  { key: "primary_sport", prompt: "Care este sportul principal sau contextul tau de antrenament?", type: "text" },
+  { key: "primary_sport", prompt: "Pentru ce sport construim planul: basketball sau football?", type: "text" },
+  { key: "sport_position", prompt: "Care este pozitia sau rolul sportivului?", type: "text" },
+  { key: "season_phase", prompt: "In ce faza esti: off_season, pre_season, in_season sau post_season?", type: "text" },
+  { key: "weekly_competitions", prompt: "Cate competitii sau meciuri ai intr-o saptamana obisnuita?", type: "number" },
+  { key: "experience_level", prompt: "Ce nivel ai acum: beginner, intermediate sau advanced?", type: "text" },
+  { key: "training_days_per_week", prompt: "Cate zile pe saptamana poti aloca pentru antrenament?", type: "number" },
+  { key: "session_duration_minutes", prompt: "Cat dureaza in mod realist o sedinta pentru tine, in minute?", type: "number" },
+  { key: "equipment_access", prompt: "Ce echipament ai disponibil? Scrie liber, de exemplu: body only, dumbbell, barbell.", type: "list" },
+  { key: "performance_priorities", prompt: "Care sunt prioritatile cheie? Exemplu: acceleration, change of direction, vertical power.", type: "list" },
+  { key: "goal_title", prompt: "Care este obiectivul tau principal in urmatoarele 4-8 saptamani?", type: "text" },
+  { key: "goal_type", prompt: "Cum ai incadra obiectivul: performance, strength, endurance, fat loss, mobility sau recovery?", type: "text" },
+  { key: "limitations_notes", prompt: "Ai limitari, accidentari sau miscari pe care vrei sa le evitam? Daca nu, scrie nu.", type: "optional" },
+];
+
+const TRAINING_MODE_QUESTION_FLOW = [
+  { key: "full_name", prompt: "Cum te numesti?", type: "text" },
+  { key: "age_years", prompt: "Cati ani ai?", type: "number" },
+  { key: "height_cm", prompt: "Ce inaltime ai in centimetri?", type: "number" },
+  { key: "weight_kg", prompt: "Ce greutate ai in kilograme?", type: "number" },
+  { key: "training_mode", prompt: "Ce tip de pregatire vrei: bodybuilding, crossfit, functional training sau HYROX?", type: "text" },
   { key: "experience_level", prompt: "Ce nivel ai acum: beginner, intermediate sau advanced?", type: "text" },
   { key: "training_days_per_week", prompt: "Cate zile pe saptamana poti aloca pentru antrenament?", type: "number" },
   { key: "session_duration_minutes", prompt: "Cat dureaza in mod realist o sedinta pentru tine, in minute?", type: "number" },
@@ -18,13 +37,31 @@ const QUESTION_FLOW = [
   { key: "limitations_notes", prompt: "Ai limitari, accidentari sau miscari pe care vrei sa le evitam? Daca nu, scrie nu.", type: "optional" },
 ];
 
-const CHAT_SESSION_STORAGE_KEY = "hybrid-athlete-chat-session-v1";
-const DEFAULT_STATUS_MESSAGE = "Coach-ul este gata pentru intake.";
+const PLAN_TRACK_OPTIONS = [
+  {
+    key: "sport",
+    eyebrow: "Sport",
+    title: "Basketball si Football",
+    description:
+      "Pentru sportivi care au nevoie de pozitie, faza de sezon, densitate competitionala si prioritati reale de performanta.",
+  },
+  {
+    key: "training_mode",
+    eyebrow: "Training Mode",
+    title: "Bodybuilding, CrossFit, Functional, HYROX",
+    description:
+      "Pentru utilizatori care vor un plan in jurul unui stil de antrenament, nu in jurul unui sport competitiv.",
+  },
+];
+
+const CHAT_SESSION_STORAGE_KEY = "hybrid-athlete-chat-session-v2";
+const DEFAULT_STATUS_MESSAGE = "Alege directia in care vrei sa construim planul.";
 
 function ChatLandingPage() {
   const navigate = useNavigate();
   const transcriptRef = useRef(null);
   const initialState = useMemo(() => loadStoredChatState(), []);
+  const [planTrack, setPlanTrack] = useState(initialState.planTrack);
   const [messages, setMessages] = useState(initialState.messages);
   const [draft, setDraft] = useState(initialState.draft);
   const [stepIndex, setStepIndex] = useState(initialState.stepIndex);
@@ -34,7 +71,8 @@ function ChatLandingPage() {
   const [errorMessage, setErrorMessage] = useState(initialState.errorMessage);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
-  const isConversationLocked = stepIndex >= QUESTION_FLOW.length;
+  const questionFlow = useMemo(() => getQuestionFlow(planTrack), [planTrack]);
+  const isConversationLocked = Boolean(planTrack) && stepIndex >= questionFlow.length && questionFlow.length > 0;
 
   const previewSessions = useMemo(
     () => buildPlanSessions(preview?.preview_plan).slice(0, 4),
@@ -43,6 +81,7 @@ function ChatLandingPage() {
 
   useEffect(() => {
     persistChatState({
+      planTrack,
       messages,
       draft,
       stepIndex,
@@ -51,7 +90,7 @@ function ChatLandingPage() {
       statusMessage,
       errorMessage,
     });
-  }, [draft, errorMessage, intake, messages, preview, statusMessage, stepIndex]);
+  }, [draft, errorMessage, intake, messages, planTrack, preview, statusMessage, stepIndex]);
 
   useEffect(() => {
     const transcript = transcriptRef.current;
@@ -65,7 +104,7 @@ function ChatLandingPage() {
   async function handleSubmit(event) {
     event.preventDefault();
     const answer = draft.trim();
-    if (!answer || isPreviewing || isConfirming || isConversationLocked) {
+    if (!planTrack || !answer || isPreviewing || isConfirming || isConversationLocked) {
       return;
     }
 
@@ -83,13 +122,13 @@ function ChatLandingPage() {
       setStepIndex(0);
       appendMessage(
         "assistant",
-        `Am inteles directia generala. Ca sa-ti structurez corect preview-ul, am nevoie de cateva detalii. ${QUESTION_FLOW[0].prompt}`,
+        `Am inteles directia generala. Ca sa-ti structurez corect preview-ul, am nevoie de cateva detalii. ${questionFlow[0].prompt}`,
       );
-      setStatusMessage("Intake-ul a inceput. Raspunde natural, un mesaj pe rand.");
+      setStatusMessage(getTrackActiveMessage(planTrack));
       return;
     }
 
-    if (stepIndex >= QUESTION_FLOW.length) {
+    if (stepIndex >= questionFlow.length) {
       appendMessage(
         "assistant",
         "Preview-ul este deja pregatit. Daca vrei un alt intake, foloseste Reset; daca directia este buna, confirma planul.",
@@ -97,7 +136,7 @@ function ChatLandingPage() {
       return;
     }
 
-    const question = QUESTION_FLOW[stepIndex];
+    const question = questionFlow[stepIndex];
     const parsed = parseAnswer(question, answer);
     if (!parsed.ok) {
       appendMessage("assistant", parsed.error);
@@ -110,10 +149,10 @@ function ChatLandingPage() {
     };
     setIntake(nextIntake);
 
-    if (stepIndex < QUESTION_FLOW.length - 1) {
+    if (stepIndex < questionFlow.length - 1) {
       const nextStep = stepIndex + 1;
       setStepIndex(nextStep);
-      appendMessage("assistant", QUESTION_FLOW[nextStep].prompt);
+      appendMessage("assistant", questionFlow[nextStep].prompt);
       return;
     }
 
@@ -126,13 +165,9 @@ function ChatLandingPage() {
     setStatusMessage("Construiesc preview-ul planului de antrenament...");
 
     try {
-      const payload = await api.previewPlan({
-        ...nextIntake,
-        goal_title: nextIntake.goal_title || nextIntake.request_text,
-        goal_type: normalizeGoalType(nextIntake.goal_type),
-      });
+      const payload = await api.previewPlan(buildPreviewPayload(planTrack, nextIntake));
       setPreview(payload);
-      setStepIndex(QUESTION_FLOW.length);
+      setStepIndex(questionFlow.length);
       setStatusMessage("Preview-ul este gata. Daca iti place directia, il poti confirma.");
       appendMessage(
         "assistant",
@@ -164,17 +199,7 @@ function ChatLandingPage() {
         timezone: intake.timezone || getLocalTimezone(),
       });
 
-      await api.saveProfile(user.id, {
-        age_years: intake.age_years,
-        height_cm: intake.height_cm,
-        weight_kg: intake.weight_kg,
-        primary_sport: intake.primary_sport,
-        experience_level: intake.experience_level,
-        training_days_per_week: intake.training_days_per_week,
-        session_duration_minutes: intake.session_duration_minutes,
-        equipment_access: intake.equipment_access,
-        limitations_notes: intake.limitations_notes || null,
-      });
+      await api.saveProfile(user.id, buildProfilePayload(planTrack, intake));
 
       const goal = await api.createGoal({
         user_id: user.id,
@@ -184,12 +209,9 @@ function ChatLandingPage() {
       });
 
       const generated = await api.generateWorkout(user.id, {
+        ...buildGenerationPayload(planTrack, intake),
         goal_id: goal.id,
         duration_weeks: preview.preview_plan.duration_weeks,
-        sessions_per_week: intake.training_days_per_week,
-        start_date: intake.start_date,
-        equipment_access: intake.equipment_access,
-        limitations_notes: intake.limitations_notes || null,
         save_plan: true,
       });
 
@@ -207,14 +229,41 @@ function ChatLandingPage() {
   }
 
   function handleResetConversation() {
-    const resetState = createDefaultChatState();
+    const resetState = createDefaultChatState(planTrack);
     clearStoredChatState();
+    setPlanTrack(resetState.planTrack);
     setMessages(resetState.messages);
     setDraft("");
     setStepIndex(resetState.stepIndex);
     setIntake(resetState.intake);
     setPreview(null);
-    setStatusMessage("Coach-ul este gata pentru un nou intake.");
+    setStatusMessage(planTrack ? getTrackReadyMessage(planTrack) : DEFAULT_STATUS_MESSAGE);
+    setErrorMessage("");
+  }
+
+  function handleSelectPlanTrack(nextTrack) {
+    const nextState = createDefaultChatState(nextTrack);
+    clearStoredChatState();
+    setPlanTrack(nextTrack);
+    setMessages(nextState.messages);
+    setDraft(nextState.draft);
+    setStepIndex(nextState.stepIndex);
+    setIntake(nextState.intake);
+    setPreview(nextState.preview);
+    setStatusMessage(nextState.statusMessage);
+    setErrorMessage("");
+  }
+
+  function handleChangePlanTrack() {
+    const nextState = createDefaultChatState(null);
+    clearStoredChatState();
+    setPlanTrack(null);
+    setMessages(nextState.messages);
+    setDraft(nextState.draft);
+    setStepIndex(nextState.stepIndex);
+    setIntake(nextState.intake);
+    setPreview(nextState.preview);
+    setStatusMessage(nextState.statusMessage);
     setErrorMessage("");
   }
 
@@ -230,8 +279,8 @@ function ChatLandingPage() {
   }
 
   const currentPrompt =
-    stepIndex >= 0 && stepIndex < QUESTION_FLOW.length
-      ? QUESTION_FLOW[stepIndex].prompt
+    stepIndex >= 0 && stepIndex < questionFlow.length
+      ? questionFlow[stepIndex].prompt
       : "Scrie pe scurt ce plan vrei sa obtii.";
 
   function handleDraftKeyDown(event) {
@@ -256,15 +305,24 @@ function ChatLandingPage() {
       <header className="chat-hero">
         <div className="hero-copy">
           <p className="eyebrow">Hybrid Athlete AI Coach</p>
-          <h1>O singura conversatie, apoi un plan clar si un calendar real.</h1>
+          <h1>
+            {planTrack
+              ? "O singura conversatie, apoi un plan clar si un calendar real."
+              : "Alege mai intai directia, apoi intri in pregatirea planului de antrenament."}
+          </h1>
           <p className="hero-text">
-            In loc de formulare clasice, landing page-ul devine un intake ghidat.
-            Tu descrii obiectivul, orchestratorul cere contextul lipsa, apoi iti
-            construieste un preview de plan inainte de confirmare.
+            {planTrack
+              ? "In loc de formulare clasice, landing page-ul devine un intake ghidat. Tu descrii obiectivul, orchestratorul cere contextul lipsa, apoi iti construieste un preview de plan inainte de confirmare."
+              : "Pe prima pagina alegi daca intri pe ruta de sport sau pe ruta de training mode. Dupa selectie, coach-ul te conduce prin intake-ul potrivit si iti construieste preview-ul."}
           </p>
         </div>
 
         <div className="chat-hero-actions">
+          {planTrack ? (
+            <button className="secondary-button" onClick={handleChangePlanTrack} type="button">
+              Change Track
+            </button>
+          ) : null}
           <Link className="secondary-link" to="/workspace">
             Open Legacy Workspace
           </Link>
@@ -274,123 +332,142 @@ function ChatLandingPage() {
 
       {errorMessage ? <div className="banner error">{errorMessage}</div> : null}
 
-      <main className="chat-layout">
-        <section className="chat-panel">
-          <div className="chat-transcript" ref={transcriptRef}>
-            {messages.map((message) => (
-              <article
-                className={`chat-bubble ${message.role === "assistant" ? "assistant" : "user"}`}
-                key={message.id}
+      {!planTrack ? (
+        <main className="selector-layout">
+          {PLAN_TRACK_OPTIONS.map((option) => (
+            <article className="selector-card" key={option.key}>
+              <p className="eyebrow">{option.eyebrow}</p>
+              <h2>{option.title}</h2>
+              <p>{option.description}</p>
+              <button
+                className="action-button"
+                onClick={() => handleSelectPlanTrack(option.key)}
+                type="button"
               >
-                <span className="chat-role">
-                  {message.role === "assistant" ? "Coach" : "Tu"}
-                </span>
-                <p>{message.content}</p>
-              </article>
-            ))}
-          </div>
-
-          {isConversationLocked ? (
-            <div className="placeholder">
-              Conversatia este inchisa pentru aceasta sesiune. Poti confirma preview-ul
-              sau poti folosi Reset ca sa pornesti un intake nou.
-              <div className="button-row">
-                <button className="secondary-button" onClick={handleResetConversation} type="button">
-                  Reset
-                </button>
-              </div>
-            </div>
-          ) : (
-            <form className="chat-input-row" onSubmit={handleSubmit}>
-              <label className="field chat-input-field">
-                <span>{currentPrompt}</span>
-                <textarea
-                  onChange={(event) => setDraft(event.target.value)}
-                  onKeyDown={handleDraftKeyDown}
-                  placeholder="Scrie raspunsul tau aici..."
-                  rows="3"
-                  value={draft}
-                />
-              </label>
-              <div className="button-row">
-                <button
-                  className="action-button"
-                  disabled={isPreviewing || isConfirming || !draft.trim()}
-                  type="submit"
+                Intra pe {option.eyebrow}
+              </button>
+            </article>
+          ))}
+        </main>
+      ) : (
+        <main className="chat-layout">
+          <section className="chat-panel">
+            <div className="chat-transcript" ref={transcriptRef}>
+              {messages.map((message) => (
+                <article
+                  className={`chat-bubble ${message.role === "assistant" ? "assistant" : "user"}`}
+                  key={message.id}
                 >
-                  {isPreviewing ? "Construiesc..." : "Trimite"}
-                </button>
-                <button className="secondary-button" onClick={handleResetConversation} type="button">
-                  Reset
-                </button>
-              </div>
-            </form>
-          )}
-        </section>
-
-        <aside className="panel preview-panel">
-          <header className="panel-header">
-            <h2>Plan Preview</h2>
-            <p>
-              Dupa intake, aici apare structura initiala a planului. Confirmarea
-              genereaza planul salvat si te duce direct in calendarul lunar.
-            </p>
-          </header>
-
-          {preview ? (
-            <div className="stack">
-              <article className="hero-plan">
-                <p className="eyebrow">Preview Ready</p>
-                <h2>{preview.preview_plan.title}</h2>
-                <p>{preview.preview_plan.description}</p>
-                <div className="plan-meta">
-                  <span className="session-pill status-completed">
-                    {preview.preview_goal.goal_type}
+                  <span className="chat-role">
+                    {message.role === "assistant" ? "Coach" : "Tu"}
                   </span>
-                  <span className="session-pill status-pending">
-                    starts {preview.preview_plan.start_date}
-                  </span>
+                  <p>{message.content}</p>
+                </article>
+              ))}
+            </div>
+
+            {isConversationLocked ? (
+              <div className="placeholder">
+                Conversatia este inchisa pentru aceasta sesiune. Poti confirma preview-ul
+                sau poti folosi Reset ca sa pornesti un intake nou.
+                <div className="button-row">
+                  <button className="secondary-button" onClick={handleResetConversation} type="button">
+                    Reset
+                  </button>
                 </div>
-              </article>
-
-              <div className="badge-grid">
-                <article className="data-badge sage">
-                  <span>Weeks</span>
-                  <strong>{preview.preview_plan.duration_weeks}</strong>
-                </article>
-                <article className="data-badge sky">
-                  <span>Sessions</span>
-                  <strong>{preview.preview_plan.sessions_per_week}</strong>
-                </article>
               </div>
+            ) : (
+              <form className="chat-input-row" onSubmit={handleSubmit}>
+                <label className="field chat-input-field">
+                  <span>{currentPrompt}</span>
+                  <textarea
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={handleDraftKeyDown}
+                    placeholder="Scrie raspunsul tau aici..."
+                    rows="3"
+                    value={draft}
+                  />
+                </label>
+                <div className="button-row">
+                  <button
+                    className="action-button"
+                    disabled={isPreviewing || isConfirming || !draft.trim()}
+                    type="submit"
+                  >
+                    {isPreviewing ? "Construiesc..." : "Trimite"}
+                  </button>
+                  <button className="secondary-button" onClick={handleResetConversation} type="button">
+                    Reset
+                  </button>
+                </div>
+              </form>
+            )}
+          </section>
 
-              <div className="stack compact">
-                {previewSessions.map((session) => (
-                  <article className="summary-card" key={session.key}>
-                    <strong>{session.isoDate || `Week ${session.weekIndex} / Day ${session.dayIndex}`}</strong>
-                    <ul className="plain-list">
-                      <li>{session.sessionLabel}</li>
-                      <li>{session.phaseName}</li>
-                      <li>{session.items.length} exercitii</li>
-                    </ul>
+          <aside className="panel preview-panel">
+            <header className="panel-header">
+              <h2>Plan Preview</h2>
+              <p>
+                Dupa intake, aici apare structura initiala a planului. Confirmarea
+                genereaza planul salvat si te duce direct in calendarul lunar.
+              </p>
+            </header>
+
+            {preview ? (
+              <div className="stack">
+                <article className="hero-plan">
+                  <p className="eyebrow">Preview Ready</p>
+                  <h2>{preview.preview_plan.title}</h2>
+                  <p>{preview.preview_plan.description}</p>
+                  <div className="plan-meta">
+                    <span className="session-pill status-completed">
+                      {preview.preview_goal.goal_type}
+                    </span>
+                    <span className="session-pill status-pending">
+                      starts {preview.preview_plan.start_date}
+                    </span>
+                  </div>
+                </article>
+
+                <div className="badge-grid">
+                  <article className="data-badge sage">
+                    <span>Weeks</span>
+                    <strong>{preview.preview_plan.duration_weeks}</strong>
                   </article>
-                ))}
-              </div>
+                  <article className="data-badge sky">
+                    <span>Sessions</span>
+                    <strong>{preview.preview_plan.sessions_per_week}</strong>
+                  </article>
+                </div>
 
-              <div className="button-row">
-                <button className="action-button" disabled={isConfirming} onClick={handleConfirmPlan} type="button">
-                  {isConfirming ? "Generez..." : "Confirma si Genereaza Planul"}
-                </button>
+                <div className="stack compact">
+                  {previewSessions.map((session) => (
+                    <article className="summary-card" key={session.key}>
+                      <strong>{session.isoDate || `Week ${session.weekIndex} / Day ${session.dayIndex}`}</strong>
+                      <ul className="plain-list">
+                        <li>{session.sessionLabel}</li>
+                        <li>{session.phaseName}</li>
+                        <li>{session.items.length} exercitii</li>
+                      </ul>
+                    </article>
+                  ))}
+                </div>
+
+                <div className="button-row">
+                  <button className="action-button" disabled={isConfirming} onClick={handleConfirmPlan} type="button">
+                    {isConfirming ? "Generez..." : "Confirma si Genereaza Planul"}
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="placeholder">
-              Conversatia iti va construi aici un preview de plan, fara sa persiste
-              date in backend pana nu confirmi.
-            </div>
-          )}
-        </aside>
-      </main>
+            ) : (
+              <div className="placeholder">
+                Dupa ce alegi track-ul si completezi intake-ul, aici apare preview-ul planului,
+                fara sa persiste date in backend pana nu confirmi.
+              </div>
+            )}
+          </aside>
+        </main>
+      )}
     </div>
   );
 }
@@ -398,7 +475,8 @@ function ChatLandingPage() {
 function parseAnswer(question, value) {
   if (question.type === "number") {
     const parsed = Number(value.replace(",", "."));
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    const minimum = question.key === "weekly_competitions" ? 0 : 1;
+    if (!Number.isFinite(parsed) || parsed < minimum) {
       return { ok: false, error: `Am nevoie de o valoare numerica valida. ${question.prompt}` };
     }
     return { ok: true, value: parsed };
@@ -441,8 +519,111 @@ function normalizeGoalType(value) {
   return normalized;
 }
 
+function getQuestionFlow(planTrack) {
+  if (planTrack === "sport") {
+    return SPORT_QUESTION_FLOW;
+  }
+  if (planTrack === "training_mode") {
+    return TRAINING_MODE_QUESTION_FLOW;
+  }
+  return [];
+}
+
+function getTrackReadyMessage(planTrack) {
+  if (planTrack === "sport") {
+    return "Modul Sport este gata. Spune-mi pe scurt ce fel de sportiv pregatim.";
+  }
+  if (planTrack === "training_mode") {
+    return "Modul Training Mode este gata. Spune-mi ce stil de pregatire vrei sa construim.";
+  }
+  return DEFAULT_STATUS_MESSAGE;
+}
+
+function getTrackActiveMessage(planTrack) {
+  if (planTrack === "sport") {
+    return "Intake-ul sport-specific a inceput. Raspunde natural, un mesaj pe rand.";
+  }
+  if (planTrack === "training_mode") {
+    return "Intake-ul pentru training mode a inceput. Raspunde natural, un mesaj pe rand.";
+  }
+  return DEFAULT_STATUS_MESSAGE;
+}
+
+function buildPreviewPayload(planTrack, intake) {
+  return {
+    request_text: intake.request_text,
+    full_name: intake.full_name,
+    age_years: intake.age_years,
+    height_cm: intake.height_cm,
+    weight_kg: intake.weight_kg,
+    primary_sport: resolvePrimarySport(planTrack, intake),
+    sport_position: planTrack === "sport" ? intake.sport_position || null : null,
+    season_phase: planTrack === "sport" ? normalizeSeasonPhase(intake.season_phase) : null,
+    weekly_competitions: planTrack === "sport" ? intake.weekly_competitions : null,
+    experience_level: intake.experience_level,
+    training_days_per_week: intake.training_days_per_week,
+    session_duration_minutes: intake.session_duration_minutes,
+    equipment_access: intake.equipment_access,
+    performance_priorities: planTrack === "sport" ? intake.performance_priorities : [],
+    limitations_notes: intake.limitations_notes || null,
+    goal_title: intake.goal_title || intake.request_text,
+    goal_type: normalizeGoalType(intake.goal_type),
+    duration_weeks: intake.duration_weeks,
+    start_date: intake.start_date,
+    timezone: intake.timezone,
+  };
+}
+
+function buildProfilePayload(planTrack, intake) {
+  return {
+    age_years: intake.age_years,
+    height_cm: intake.height_cm,
+    weight_kg: intake.weight_kg,
+    primary_sport: resolvePrimarySport(planTrack, intake),
+    sport_position: planTrack === "sport" ? intake.sport_position || null : null,
+    season_phase: planTrack === "sport" ? normalizeSeasonPhase(intake.season_phase) : null,
+    weekly_competitions: planTrack === "sport" ? intake.weekly_competitions : null,
+    experience_level: intake.experience_level,
+    training_days_per_week: intake.training_days_per_week,
+    session_duration_minutes: intake.session_duration_minutes,
+    equipment_access: intake.equipment_access,
+    performance_priorities: planTrack === "sport" ? intake.performance_priorities : [],
+    limitations_notes: intake.limitations_notes || null,
+  };
+}
+
+function buildGenerationPayload(planTrack, intake) {
+  return {
+    sessions_per_week: intake.training_days_per_week,
+    start_date: intake.start_date,
+    equipment_access: intake.equipment_access,
+    limitations_notes: intake.limitations_notes || null,
+    sport_position: planTrack === "sport" ? intake.sport_position || null : null,
+    season_phase: planTrack === "sport" ? normalizeSeasonPhase(intake.season_phase) : null,
+    weekly_competitions: planTrack === "sport" ? intake.weekly_competitions : null,
+    performance_priorities: planTrack === "sport" ? intake.performance_priorities : [],
+  };
+}
+
+function resolvePrimarySport(planTrack, intake) {
+  if (planTrack === "sport") {
+    return String(intake.primary_sport || "basketball").trim().toLowerCase();
+  }
+
+  const trainingMode = String(intake.training_mode || "").trim();
+  return trainingMode || "hybrid training";
+}
+
+function normalizeSeasonPhase(value) {
+  if (!value) {
+    return null;
+  }
+
+  return String(value).trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
 function loadStoredChatState() {
-  const defaultState = createDefaultChatState();
+  const defaultState = createDefaultChatState(null);
   if (typeof window === "undefined") {
     return defaultState;
   }
@@ -454,22 +635,28 @@ function loadStoredChatState() {
     }
 
     const stored = JSON.parse(raw);
+    const planTrack = stored.planTrack === "sport" || stored.planTrack === "training_mode"
+      ? stored.planTrack
+      : null;
+    const trackDefaultState = createDefaultChatState(planTrack);
+
     return {
+      planTrack,
       messages:
         Array.isArray(stored.messages) && stored.messages.length > 0
           ? stored.messages
-          : defaultState.messages,
+          : trackDefaultState.messages,
       draft: typeof stored.draft === "string" ? stored.draft : "",
-      stepIndex: Number.isInteger(stored.stepIndex) ? stored.stepIndex : defaultState.stepIndex,
+      stepIndex: Number.isInteger(stored.stepIndex) ? stored.stepIndex : trackDefaultState.stepIndex,
       intake:
         stored.intake && typeof stored.intake === "object"
-          ? { ...defaultState.intake, ...stored.intake }
-          : defaultState.intake,
+          ? { ...trackDefaultState.intake, ...stored.intake }
+          : trackDefaultState.intake,
       preview: stored.preview || null,
       statusMessage:
         typeof stored.statusMessage === "string" && stored.statusMessage.trim()
           ? stored.statusMessage
-          : defaultState.statusMessage,
+          : trackDefaultState.statusMessage,
       errorMessage: typeof stored.errorMessage === "string" ? stored.errorMessage : "",
     };
   } catch {
@@ -493,30 +680,37 @@ function clearStoredChatState() {
   window.sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
 }
 
-function createDefaultChatState() {
+function createDefaultChatState(planTrack = null) {
   return {
-    messages: [createWelcomeMessage()],
+    planTrack,
+    messages: planTrack ? [createWelcomeMessage(planTrack)] : [],
     draft: "",
     stepIndex: -1,
-    intake: buildDefaultIntake(),
+    intake: buildDefaultIntake(planTrack),
     preview: null,
-    statusMessage: DEFAULT_STATUS_MESSAGE,
+    statusMessage: planTrack ? getTrackReadyMessage(planTrack) : DEFAULT_STATUS_MESSAGE,
     errorMessage: "",
   };
 }
 
-function buildDefaultIntake() {
+function buildDefaultIntake(planTrack = null) {
   return {
+    plan_track: planTrack,
     request_text: "",
     full_name: "",
     age_years: null,
     height_cm: null,
     weight_kg: null,
     primary_sport: "",
+    sport_position: "",
+    season_phase: "",
+    weekly_competitions: null,
     experience_level: "",
     training_days_per_week: 4,
     session_duration_minutes: 60,
     equipment_access: [],
+    performance_priorities: [],
+    training_mode: "",
     goal_title: "",
     goal_type: "performance",
     limitations_notes: "",
@@ -526,12 +720,21 @@ function buildDefaultIntake() {
   };
 }
 
-function createWelcomeMessage() {
+function createWelcomeMessage(planTrack) {
+  if (planTrack === "sport") {
+    return {
+      id: "welcome",
+      role: "assistant",
+      content:
+        "Ai intrat pe modulul Sport. Spune-mi pe scurt ce sportiv pregatim si ce vrei sa obtii, iar eu iti construiesc intake-ul sport-specific pas cu pas.",
+    };
+  }
+
   return {
     id: "welcome",
     role: "assistant",
     content:
-      "Spune-mi pe scurt ce vrei sa obtii, iar eu iti construiesc intake-ul pas cu pas si iti pregatesc un preview de plan.",
+      "Ai intrat pe modulul Training Mode. Spune-mi ce tip de pregatire vrei sa construim, iar eu iti pregatesc intake-ul si preview-ul de plan.",
   };
 }
 
