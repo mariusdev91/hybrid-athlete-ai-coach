@@ -403,3 +403,41 @@ def test_ai_generate_football_plan_uses_sport_specific_strategy(client):
     } == {"In-Season Maintenance", "Neural Freshness", "Fixture Deload"}
     assert any(item["session_label"] == "Neural Speed Primer" for item in payload["generated_plan"]["items"])
     assert any("hamstring" in (item["notes"] or "").lower() for item in payload["generated_plan"]["items"])
+
+
+def test_ai_generate_offseason_football_plan_has_plyometrics_and_variety(client):
+    user = create_user(client, email="football-variety@example.com")
+    user_id = user["id"]
+    create_profile(
+        client,
+        user_id,
+        primary_sport="football",
+        sport_position="winger",
+        season_phase="off_season",
+        weekly_competitions=0,
+        performance_priorities=["acceleration", "max speed", "change of direction"],
+        training_days_per_week=4,
+        session_duration_minutes=60,
+    )
+
+    generated = client.post(
+        f"/ai/users/{user_id}/generate-workout",
+        json={
+            "duration_weeks": 4,
+            "sessions_per_week": 4,
+            "save_plan": False,
+        },
+    )
+
+    assert generated.status_code == 200
+    payload = generated.json()
+    names = {item["exercise_name"] for item in payload["generated_plan"]["items"]}
+    lower_names = {name.lower() for name in names}
+
+    assert payload["generated_plan"]["sessions_per_week"] == 4
+    assert len(names) >= 12
+    assert any(
+        keyword in name
+        for name in lower_names
+        for keyword in ("jump", "hop", "bound", "long jump")
+    )

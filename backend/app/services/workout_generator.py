@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections import Counter
+from collections import defaultdict
+from collections import deque
 from collections.abc import Iterable
 from datetime import date
 from datetime import timedelta
@@ -406,10 +409,11 @@ class WorkoutGeneratorService:
         day_offsets = self._resolve_training_day_offsets(session_count)
         search_queries: list[str] = []
         items: list[GeneratedWorkoutPlanItem] = []
+        selection_state = self._build_selection_state()
 
         for week in phase_schedule:
             for day_index, template in enumerate(templates, start=1):
-                used_ids: set[str] = set()
+                day_used_ids: set[str] = set()
                 session_label = template["label"]
                 session_focus = self._build_session_focus(template, week)
                 planned_date = start_date + timedelta(
@@ -420,14 +424,23 @@ class WorkoutGeneratorService:
                     exercise = self._pick_exercise(
                         slot["queries"],
                         context.equipment_access,
-                        used_ids,
+                        day_used_ids,
                         search_queries,
+                        selection_state=selection_state,
+                        week_index=week["week_index"],
+                        role=slot["role"],
                     )
                     if not exercise:
                         continue
 
                     if exercise.get("id"):
-                        used_ids.add(exercise["id"])
+                        day_used_ids.add(exercise["id"])
+                    self._register_selected_exercise(
+                        selection_state,
+                        exercise=exercise,
+                        week_index=week["week_index"],
+                        role=slot["role"],
+                    )
 
                     prescription = self._build_prescription(
                         slot["role"],
@@ -681,9 +694,13 @@ class WorkoutGeneratorService:
         allowed_equipment: list[str],
         used_ids: set[str],
         search_queries: list[str],
+        *,
+        selection_state: dict[str, Any],
+        week_index: int,
+        role: str,
     ) -> dict[str, Any] | None:
         normalized_equipment = {item.lower() for item in allowed_equipment}
-        candidates = []
+        candidates: dict[str, dict[str, Any]] = {}
 
         for option in query_options:
             query = option["query"]
@@ -692,49 +709,181 @@ class WorkoutGeneratorService:
                 query=query,
                 primary_muscles=option.get("primary_muscles"),
                 secondary_muscles=option.get("secondary_muscles"),
-                k=8,
+                k=14,
             )
 
-            filtered = []
             for exercise in results:
                 if exercise.get("id") in used_ids:
                     continue
                 if not self._equipment_allowed(exercise.get("equipment"), normalized_equipment):
                     continue
-                filtered.append({**exercise, "source_query": query})
-
-            if filtered:
-                candidates.extend(filtered)
+                candidate = {**exercise, "source_query": query}
+                self._store_candidate(candidates, candidate)
 
         if candidates:
             return max(
-                candidates,
-                key=lambda exercise: (
-                    self._score_exercise_match(exercise, exercise["source_query"]),
-                    -float(exercise.get("distance", 999999.0)),
+                candidates.values(),
+                key=lambda exercise: self._score_candidate(
+                    exercise,
+                    selection_state=selection_state,
+                    week_index=week_index,
+                    role=role,
                 ),
             ).copy()
 
-        fallback_candidates = []
         for option in query_options:
             query = option["query"]
-            results = exercise_lookup.search_exercises(query=query, k=8)
+            results = exercise_lookup.search_exercises(query=query, k=14)
             for exercise in results:
                 if exercise.get("id") in used_ids:
                     continue
                 if not self._equipment_allowed(exercise.get("equipment"), normalized_equipment):
                     continue
-                fallback_candidates.append({**exercise, "source_query": query})
-        if fallback_candidates:
+                candidate = {**exercise, "source_query": query}
+                self._store_candidate(candidates, candidate)
+        if candidates:
             return max(
-                fallback_candidates,
-                key=lambda exercise: (
-                    self._score_exercise_match(exercise, exercise["source_query"]),
-                    -float(exercise.get("distance", 999999.0)),
+                candidates.values(),
+                key=lambda exercise: self._score_candidate(
+                    exercise,
+                    selection_state=selection_state,
+                    week_index=week_index,
+                    role=role,
                 ),
             ).copy()
 
         return None
+
+    def _build_selection_state(self) -> dict[str, Any]:
+        return {
+            "global_name_counts": Counter(),
+            "global_family_counts": Counter(),
+            "week_name_counts": defaultdict(Counter),
+            "week_role_family_counts": defaultdict(Counter),
+            "recent_names": deque(maxlen=8),
+        }
+
+    def _register_selected_exercise(
+        self,
+        selection_state: dict[str, Any],
+        *,
+        exercise: dict[str, Any],
+        week_index: int,
+        role: str,
+    ) -> None:
+        normalized_name = normalize_text(exercise.get("name", ""))
+        if normalized_name:
+            selection_state["global_name_counts"][normalized_name] += 1
+            selection_state["week_name_counts"][week_index][normalized_name] += 1
+            selection_state["recent_names"].append(normalized_name)
+
+        family = self._infer_exercise_family(exercise)
+        if family:
+            selection_state["global_family_counts"][family] += 1
+            selection_state["week_role_family_counts"][(week_index, role)][family] += 1
+
+    def _store_candidate(
+        self,
+        candidates: dict[str, dict[str, Any]],
+        candidate: dict[str, Any],
+    ) -> None:
+        key = candidate.get("id") or normalize_text(candidate.get("name", ""))
+        if not key:
+            return
+
+        existing = candidates.get(key)
+        if existing is None:
+            candidates[key] = candidate
+            return
+
+        existing_score = self._score_exercise_match(existing, existing["source_query"])
+        candidate_score = self._score_exercise_match(candidate, candidate["source_query"])
+        existing_distance = float(existing.get("distance", 999999.0))
+        candidate_distance = float(candidate.get("distance", 999999.0))
+
+        if candidate_score > existing_score or (
+            candidate_score == existing_score and candidate_distance < existing_distance
+        ):
+            candidates[key] = candidate
+
+    def _score_candidate(
+        self,
+        exercise: dict[str, Any],
+        *,
+        selection_state: dict[str, Any],
+        week_index: int,
+        role: str,
+    ) -> tuple[float, float]:
+        match_score = self._score_exercise_match(exercise, exercise["source_query"])
+        diversity_bonus = self._score_diversity_bonus(
+            exercise,
+            selection_state=selection_state,
+            week_index=week_index,
+            role=role,
+        )
+        return (
+            match_score + diversity_bonus,
+            -float(exercise.get("distance", 999999.0)),
+        )
+
+    def _score_diversity_bonus(
+        self,
+        exercise: dict[str, Any],
+        *,
+        selection_state: dict[str, Any],
+        week_index: int,
+        role: str,
+    ) -> float:
+        normalized_name = normalize_text(exercise.get("name", ""))
+        family = self._infer_exercise_family(exercise)
+        score = 0.0
+
+        if normalized_name:
+            global_name_count = selection_state["global_name_counts"][normalized_name]
+            week_name_count = selection_state["week_name_counts"][week_index][normalized_name]
+            if week_name_count:
+                score -= 24 + (week_name_count * 8)
+            elif global_name_count:
+                score -= 6 + (global_name_count * 3)
+
+            if normalized_name in selection_state["recent_names"]:
+                score -= 10
+
+        if family:
+            same_role_family_count = selection_state["week_role_family_counts"][(week_index, role)][family]
+            global_family_count = selection_state["global_family_counts"][family]
+            if same_role_family_count:
+                score -= 16 + (same_role_family_count * 5)
+            elif global_family_count:
+                score -= 2 + global_family_count
+
+        return score
+
+    def _infer_exercise_family(self, exercise: dict[str, Any]) -> str:
+        text = normalize_text(" ".join(filter(None, [exercise.get("name", ""), exercise.get("source_query", "")])))
+        family_keywords = (
+            ("box_jump", ("box jump",)),
+            ("jump_squat", ("jump squat", "rocket jump", "split jump", "knee tuck jump")),
+            ("hop_bound", ("hop", "bound", "stride jump", "standing long jump")),
+            ("sprint", ("sprint",)),
+            ("lunge_split_squat", ("split squat", "lunge")),
+            ("squat", ("squat",)),
+            ("hamstring_resilience", ("hamstring", "leg curl")),
+            ("adductor_resilience", ("groin", "adductor")),
+            ("glute_bridge", ("glute bridge",)),
+            ("calf", ("calf",)),
+            ("row", ("row",)),
+            ("push", ("push", "push-up", "pushup")),
+            ("medicine_ball_power", ("medicine ball", "slam", "throw")),
+            ("plank_bridge", ("plank", "side bridge")),
+            ("crunch", ("crunch",)),
+            ("mobility", ("stretch", "smr")),
+        )
+
+        for family, keywords in family_keywords:
+            if any(keyword in text for keyword in keywords):
+                return family
+        return text.split(" ")[0] if text else "general"
 
     def _equipment_allowed(self, equipment: str | None, allowed_equipment: set[str]) -> bool:
         if not allowed_equipment:
@@ -750,7 +899,7 @@ class WorkoutGeneratorService:
     def _score_exercise_match(self, exercise: dict[str, Any], query: str) -> int:
         query_text = normalize_text(query)
         exercise_name = normalize_text(exercise.get("name", ""))
-        score = 0
+        score = int(exercise.get("keyword_score", 0))
 
         if query_text and query_text in exercise_name:
             score += 10
